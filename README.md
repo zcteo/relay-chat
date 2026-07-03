@@ -29,7 +29,7 @@
 
 ```bash
 pip install -r requirements.txt
-python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
+python3 -m uvicorn server.main:app --host 0.0.0.0 --port 8000
 ```
 
 访问：
@@ -44,14 +44,14 @@ http://服务器IP:8000
 - 转发请求默认带：`X-Origin-Agent: stepcode`。
 - Anthropic 鉴权也使用：`Authorization: Bearer <token>`。
 - Token 当前保存在浏览器 `localStorage`，生产公网部署建议配合 HTTPS 和访问认证。
-- 安全增强计划见 `TODO.md`。
+- 安全增强计划见 `docs/TODO.md`。
 
 ## systemd 安装
 
 安装并启动服务：
 
 ```bash
-sudo ./etc/install.sh
+sudo ./scripts/install.sh
 ```
 
 默认配置：
@@ -65,13 +65,13 @@ sudo ./etc/install.sh
 参数形式覆盖默认值：
 
 ```bash
-sudo ./etc/install.sh --service-name relay-chat --host 127.0.0.1 --port 8000 --user zzc
+sudo ./scripts/install.sh --service-name relay-chat --host 127.0.0.1 --port 8000 --user zzc
 ```
 
 如果使用 Nginx/Caddy 做 HTTPS 反代，推荐只监听本机：
 
 ```bash
-sudo ./etc/install.sh --host 127.0.0.1 --port 8000
+sudo ./scripts/install.sh --host 127.0.0.1 --port 8000
 ```
 
 查看状态：
@@ -92,16 +92,16 @@ journalctl -u relay-chat.service -f
 sudo systemctl restart relay-chat.service
 ```
 
-只修改 `src/static/` 下的前端静态文件时，刷新浏览器即可生效。
+只修改 `static/` 下的前端静态文件时，刷新浏览器即可生效。
 
 卸载 systemd 服务：
 
 ```bash
-sudo ./etc/uninstall.sh
+sudo ./scripts/uninstall.sh
 ```
 
 卸载自定义服务名：
 
 ```bash
-sudo ./etc/uninstall.sh --service-name relay-chat
+sudo ./scripts/uninstall.sh --service-name relay-chat
 ```

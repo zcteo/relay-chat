@@ -19,21 +19,23 @@
 ```text
 relay-chat/
 ├── README.md              # 面向使用者的启动/安装说明
-├── TODO.md                # 后续待办事项
-├── HANDOFF.md             # 本文件，面向新开发者
-├── requirements.txt       # Python 依赖
 ├── .gitignore
-├── etc/
-│   ├── install.sh         # systemd 安装脚本
-│   └── uninstall.sh       # systemd 卸载脚本
-└── src/
-    ├── __init__.py
-    ├── main.py            # FastAPI 后端
-    └── static/
-        ├── index.html     # 页面结构
-        ├── style.css      # 样式
-        ├── app.js         # 前端主逻辑
-        └── markdown.js    # 独立 Markdown 渲染器
+├── requirements.txt       # Python 依赖
+├── server/
+│   ├── __init__.py
+│   └── main.py            # FastAPI 后端
+├── static/
+│   ├── index.html         # 页面结构
+│   ├── app.js             # 前端主逻辑
+│   ├── favicon.ico
+│   ├── markdown.js        # 独立 Markdown 渲染器
+│   └── style.css          # 样式
+├── docs/
+│   ├── HANDOFF.md         # 本文件，面向新开发者
+│   └── TODO.md            # 后续待办事项
+└── scripts/
+    ├── install.sh         # systemd 安装脚本
+    └── uninstall.sh       # systemd 卸载脚本
 ```
 
 ## 运行方式
@@ -41,19 +43,19 @@ relay-chat/
 开发启动：
 
 ```bash
-python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
+python3 -m uvicorn server.main:app --host 0.0.0.0 --port 8000
 ```
 
 systemd 安装：
 
 ```bash
-sudo ./etc/install.sh
+sudo ./scripts/install.sh
 ```
 
 使用反向代理/HTTPS 时推荐：
 
 ```bash
-sudo ./etc/install.sh --host 127.0.0.1 --port 8000
+sudo ./scripts/install.sh --host 127.0.0.1 --port 8000
 ```
 
 日志：
@@ -68,18 +70,26 @@ journalctl -u relay-chat.service -f
 systemctl is-active relay-chat.service
 ```
 
-如果输出为 `active`，说明当前以 systemd 服务运行，直接重启部署：
+如果输出为 `active`，说明当前以 systemd 服务运行。
+
+只修改普通 Python 后端代码时，直接重启部署：
 
 ```bash
 sudo systemctl restart relay-chat.service
 ```
 
-只修改 `src/static/` 下的静态前端文件时，不需要重启 systemd 服务；浏览器刷新即可加载新文件。
+如果修改了目录结构、服务入口、依赖文件、虚拟环境位置或 `scripts/install.sh`，需要重新运行安装脚本生成 systemd unit，不能只 restart：
+
+```bash
+sudo ./scripts/install.sh
+```
+
+只修改 `static/` 下的静态前端文件时，不需要重启 systemd 服务；浏览器刷新即可加载新文件。
 
 如果不是 systemd 运行，按开发方式直接启动项目：
 
 ```bash
-python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
+python3 -m uvicorn server.main:app --host 0.0.0.0 --port 8000
 ```
 
 ## 后端说明
@@ -87,13 +97,13 @@ python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
 后端入口：
 
 ```text
-src/main.py
+server/main.py
 ```
 
 FastAPI 路由：
 
 - `GET /`
-  - 返回 `src/static/index.html`
+  - 返回 `static/index.html`
 - `POST /api/models`
   - 请求上游：`<baseUrl>/v1/models`
 - `POST /api/chat`
@@ -102,8 +112,8 @@ FastAPI 路由：
 静态文件路径使用 `Path(__file__)` 推导，不依赖进程工作目录：
 
 ```python
-BASE_DIR = Path(__file__).resolve().parent
-STATIC_DIR = BASE_DIR / "static"
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+STATIC_DIR = PROJECT_DIR / "static"
 ```
 
 ### 协议枚举
@@ -189,13 +199,13 @@ x-api-key
 前端主逻辑：
 
 ```text
-src/static/app.js
+static/app.js
 ```
 
 Markdown 渲染：
 
 ```text
-src/static/markdown.js
+static/markdown.js
 ```
 
 不要把 Markdown 渲染逻辑塞回 `app.js`。
@@ -277,7 +287,7 @@ dark
 - `data-theme` 保存用户选择：`auto` / `light` / `dark`
 - `data-resolved-theme` 保存当前实际主题：`light` / `dark`
 
-浅色和深色主题不要拆成两个 CSS 文件。当前主题差异主要是颜色 token，统一放在 `src/static/style.css` 的 CSS 变量里维护，避免重复布局规则。
+浅色和深色主题不要拆成两个 CSS 文件。当前主题差异主要是颜色 token，统一放在 `static/style.css` 的 CSS 变量里维护，避免重复布局规则。
 
 协议下拉顺序必须为：
 
@@ -419,7 +429,7 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 - 停止按钮
 - 代码块复制按钮
 
-`src/static/style.css` 已使用 Prettier 格式化为多行 CSS。后续修改样式时保持可读格式，不要压回单行。
+`static/style.css` 已使用 Prettier 格式化为多行 CSS。后续修改样式时保持可读格式，不要压回单行。
 
 所有 JS 文件采用 Prettier 格式化和无分号风格。后续新增或修改 JS 时保持同一格式，不要重新引入行尾分号。
 
@@ -433,7 +443,7 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 - 资源滥用：长连接、并发、带宽
 - 被当代理跳板
 
-相关增强已经写在 `TODO.md`：
+相关增强已经写在 `docs/TODO.md`：
 
 - 访问认证
 - 配置文件 URL 白名单
@@ -450,7 +460,7 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 7. 不要增加 `auto` 协议选项。
 8. 生成中不要允许发送新消息。
 9. 停止按钮只能鼠标点击触发，不能由 Enter 触发。
-10. 修改目录结构时，同步 `etc/install.sh` 的 `uvicorn src.main:app`。
+10. 修改目录结构时，同步 `scripts/install.sh` 的 `uvicorn server.main:app`。
 11. 修改功能或数据结构时，不考虑旧数据同步、旧数据迁移、旧 localStorage 兼容；按新逻辑直接覆盖。
 12. 提交代码前需要先按项目约定格式化代码；JS 使用 Prettier 无分号风格，CSS 保持 Prettier 多行格式。
 
@@ -459,10 +469,10 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 改动后至少验证：
 
 ```bash
-python3 -m py_compile src/main.py
-bash -n etc/install.sh
-bash -n etc/uninstall.sh
-python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
+python3 -m py_compile server/main.py
+bash -n scripts/install.sh
+bash -n scripts/uninstall.sh
+python3 -m uvicorn server.main:app --host 0.0.0.0 --port 8000
 ```
 
 浏览器验证：

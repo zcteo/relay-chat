@@ -5,15 +5,15 @@ SERVICE_NAME="relay-chat"
 
 usage() {
   cat <<USAGE
-用法: sudo ./etc/uninstall.sh [选项]
+用法: sudo ./scripts/uninstall.sh [选项]
 
 选项:
   --service-name NAME   systemd 服务名，默认: relay-chat
   -h, --help            显示帮助
 
 示例:
-  sudo ./etc/uninstall.sh
-  sudo ./etc/uninstall.sh --service-name relay-chat
+  sudo ./scripts/uninstall.sh
+  sudo ./scripts/uninstall.sh --service-name relay-chat
 USAGE
 }
 
@@ -39,7 +39,7 @@ fi
 UNIT_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
 if [[ "$(id -u)" -ne 0 ]]; then
-  echo "请用 root 运行，例如：sudo ./etc/uninstall.sh" >&2
+  echo "请用 root 运行，例如：sudo ./scripts/uninstall.sh" >&2
   exit 1
 fi
 

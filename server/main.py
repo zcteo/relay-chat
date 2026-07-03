@@ -16,8 +16,8 @@ Protocol = Literal["openai_chat", "openai_responses", "anthropic"]
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("relay-chat")
 
-BASE_DIR = Path(__file__).resolve().parent
-STATIC_DIR = BASE_DIR / "static"
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+STATIC_DIR = PROJECT_DIR / "static"
 
 app = FastAPI(title="RelayChat Proxy")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -288,4 +288,5 @@ async def chat(req: ChatRequest) -> StreamingResponse:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
+    uvicorn.run("server.main:app", host="0.0.0.0", port=8000, reload=True)

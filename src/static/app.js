@@ -3,6 +3,7 @@ const KEY = "relaychat-state-v1"
 
 const defaultState = {
   settings: {
+    theme: "auto",
     protocol: "openai_responses",
     baseUrl: "",
     token: "",
@@ -29,10 +30,15 @@ function uid() {
 }
 function load() {
   try {
-    return {
+    const loaded = {
       ...structuredClone(defaultState),
       ...(JSON.parse(localStorage.getItem(KEY)) || {}),
     }
+    loaded.settings = {
+      ...structuredClone(defaultState.settings),
+      ...(loaded.settings || {}),
+    }
+    return loaded
   } catch {
     return structuredClone(defaultState)
   }
@@ -82,6 +88,7 @@ function newSession() {
 
 function syncSettingsToUI() {
   const s = state.settings
+  $("theme").value = s.theme || "auto"
   $("protocol").value = s.protocol || "openai_responses"
   $("settingsProtocol").value = s.protocol || "openai_responses"
   $("baseUrl").value = s.baseUrl || ""
@@ -94,6 +101,7 @@ function syncSettingsToUI() {
 }
 function syncSettingsFromUI() {
   Object.assign(state.settings, {
+    theme: $("theme").value,
     protocol: $("protocol").value,
     baseUrl: $("baseUrl").value.trim(),
     token: $("token").value.trim(),
@@ -104,6 +112,7 @@ function syncSettingsFromUI() {
     systemPrompt: $("systemPrompt").value,
   })
   save()
+  applyTheme()
 }
 function renderModels() {
   const selects = [$("model"), $("settingsModel")]
@@ -138,6 +147,18 @@ function applyProtocolForModel(model) {
 function renderModelLabel() {
   const model = state.settings.model || "选择模型"
   $("modelLabel").textContent = model
+}
+function resolvedTheme() {
+  const theme = state.settings.theme || "auto"
+  if (theme === "dark" || theme === "light") return theme
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light"
+}
+function applyTheme() {
+  const theme = state.settings.theme || "auto"
+  document.documentElement.dataset.theme = theme
+  document.documentElement.dataset.resolvedTheme = resolvedTheme()
 }
 
 function closeSessionMenus() {
@@ -720,6 +741,7 @@ $("protocol").addEventListener("change", () => {
   renderModelLabel()
 })
 for (const id of [
+  "theme",
   "baseUrl",
   "token",
   "thinking",
@@ -731,5 +753,10 @@ for (const id of [
     syncSettingsFromUI()
     renderModelLabel()
   })
+const colorSchemeQuery = window.matchMedia("(prefers-color-scheme: dark)")
+if (colorSchemeQuery.addEventListener)
+  colorSchemeQuery.addEventListener("change", applyTheme)
+else colorSchemeQuery.addListener(applyTheme)
+applyTheme()
 render()
 autoResizeInput()

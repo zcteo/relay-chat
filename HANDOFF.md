@@ -205,7 +205,7 @@ src/static/markdown.js
 本地存储 key：
 
 ```js
-const KEY = 'relaychat-state-v1';
+const KEY = "relaychat-state-v1"
 ```
 
 状态大致结构：
@@ -213,6 +213,7 @@ const KEY = 'relaychat-state-v1';
 ```js
 {
   settings: {
+    theme,
     protocol,
     baseUrl,
     token,
@@ -250,6 +251,33 @@ const KEY = 'relaychat-state-v1';
 这是用户明确要求的，不要当成重复 UI 删除。
 
 两处应保持同步。
+
+### 外观设置
+
+设置菜单里有外观选择：
+
+```text
+自动
+浅色
+深色
+```
+
+value 分别为：
+
+```text
+auto
+light
+dark
+```
+
+默认值为 `auto`，保存在 `state.settings.theme`。自动模式使用 `prefers-color-scheme` 跟随浏览器/系统主题切换。
+
+主题通过 `document.documentElement.dataset.theme` 和 `dataset.resolvedTheme` 应用：
+
+- `data-theme` 保存用户选择：`auto` / `light` / `dark`
+- `data-resolved-theme` 保存当前实际主题：`light` / `dark`
+
+浅色和深色主题不要拆成两个 CSS 文件。当前主题差异主要是颜色 token，统一放在 `src/static/style.css` 的 CSS 变量里维护，避免重复布局规则。
 
 协议下拉顺序必须为：
 
@@ -380,6 +408,7 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 - 用户消息右侧浅灰气泡
 - AI 消息无大色块
 - thinking 区域为浅灰引用块
+- 浅色/深色主题都应接近 ChatGPT 对应主题的中性色风格
 
 图标不直接引用 ChatGPT 私有 sprite 路径 `/cdn/assets/...`，因为本站会 404。
 
@@ -423,6 +452,7 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 9. 停止按钮只能鼠标点击触发，不能由 Enter 触发。
 10. 修改目录结构时，同步 `etc/install.sh` 的 `uvicorn src.main:app`。
 11. 修改功能或数据结构时，不考虑旧数据同步、旧数据迁移、旧 localStorage 兼容；按新逻辑直接覆盖。
+12. 提交代码前需要先按项目约定格式化代码；JS 使用 Prettier 无分号风格，CSS 保持 Prettier 多行格式。
 
 ## 快速验证清单
 
@@ -442,6 +472,8 @@ python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
 - 获取模型成功后顶部 toast 提示
 - 模型/协议左右两个菜单同步
 - 空会话输入框和提示词在一起
+- 外观设置可在自动/浅色/深色之间切换
+- 自动外观跟随浏览器或系统深浅色设置
 - 发送后流式输出
 - 打字机输出时向上滚动能暂停自动跟随
 - 点击回到底部按钮后，后续打字机输出能继续自动向下滚动

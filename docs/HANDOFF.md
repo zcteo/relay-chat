@@ -238,6 +238,7 @@ const KEY = "relaychat-state-v1"
     {
       id,
       title,
+      titleSource,
       createdAt,
       updatedAt,
       messages: [
@@ -250,6 +251,28 @@ const KEY = "relaychat-state-v1"
 ```
 
 当前所有设置和历史都只存在浏览器本地。
+
+`settings.models` 只用于前端本地模型下拉列表，不要传给后端 `/api/*` 请求。发请求时使用白名单字段组装 payload，避免把本地缓存的完整模型列表带到后端。
+
+### 会话标题来源
+
+`session.titleSource` 表示标题来源：
+
+```text
+default -> 默认/临时标题
+model   -> 模型自动总结标题
+user    -> 用户手动重命名
+```
+
+旧数据可能没有 `titleSource`，按 `default` 处理。
+
+新会话首次回复后，如果 `titleSource` 缺失或为 `default`，前端会异步调用当前模型，只根据第一次用户消息和第一次助手回复生成简短标题，并更新左侧会话列表。
+
+如果 `titleSource` 为 `user`，说明用户手动重命名过，自动标题生成绝对不能覆盖。
+
+标题生成请求有独立的 `AbortController`。切换会话、新建会话、删除会话、清空会话、用户重命名、再次发送消息时，都需要取消正在运行的标题生成请求，避免后台辅助请求长时间占用上游连接。
+
+标题生成请求有 30 秒前端超时，超时后自动 abort；它是辅助功能，不能因为上游模型长时间 thinking 阻塞用户继续使用。
 
 ### 协议选择 UI
 

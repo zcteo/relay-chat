@@ -62,6 +62,24 @@ sudo ./etc/install.sh --host 127.0.0.1 --port 8000
 journalctl -u relay-chat.service -f
 ```
 
+改完代码后的部署/运行方式需要先检测当前环境：
+
+```bash
+systemctl is-active relay-chat.service
+```
+
+如果输出为 `active`，说明当前以 systemd 服务运行，直接重启部署：
+
+```bash
+sudo systemctl restart relay-chat.service
+```
+
+如果不是 systemd 运行，按开发方式直接启动项目：
+
+```bash
+python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
+```
+
 ## 后端说明
 
 后端入口：
@@ -294,6 +312,7 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 - 标题
 - 列表
 - 引用
+- 分隔线：`---`、`***`、`___`，支持超过 3 个字符，也支持中间有空格
 - 代码块
 - 行内代码
 - 粗体
@@ -301,6 +320,15 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 - 链接
 
 渲染前会 HTML 转义，避免执行模型输出的 HTML。
+
+代码块注意事项：
+
+- 围栏支持反引号和波浪线：`````、`~~~`。
+- 围栏前允许多个空格；渲染时会按开围栏的缩进整体剥掉代码内容缩进。
+- 代码块输出为 `.code-block` 容器，里面包含右上角 `.copy-code` 复制按钮和 `<pre><code>`。
+- 复制按钮逻辑在 `app.js`，使用事件委托绑定到 `.copy-code`；不要把复制逻辑塞进 `markdown.js`。
+- 复制优先使用 Clipboard API，失败/非安全上下文时使用 textarea 兜底。
+- 代码块图标使用本地内联 SVG，不引用外站 sprite。
 
 ### 空会话布局
 
@@ -349,6 +377,11 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 - 模型下拉箭头
 - 发送按钮
 - 停止按钮
+- 代码块复制按钮
+
+`src/static/style.css` 已使用 Prettier 格式化为多行 CSS。后续修改样式时保持可读格式，不要压回单行。
+
+所有 JS 文件采用 Prettier 格式化和无分号风格。后续新增或修改 JS 时保持同一格式，不要重新引入行尾分号。
 
 ## 安全现状
 
@@ -400,4 +433,7 @@ python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
 - 空会话输入框和提示词在一起
 - 发送后流式输出
 - Markdown 正文和 thinking 都能渲染
+- Markdown 分隔线能渲染为横线
+- 缩进围栏代码块能渲染，且代码内容没有额外整体缩进
+- 代码块右上角复制按钮不占用额外一行，点击后能复制代码
 - 生成中点击停止显示 `已停止生成`

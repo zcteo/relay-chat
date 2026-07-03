@@ -16,6 +16,8 @@
   - 其他模型 -> OpenAI Chat
 - 支持流式显示和前端逐字输出效果
 - 支持 thinking/reasoning 展示
+- 支持轻量 Markdown 渲染：标题、列表、引用、分隔线、链接、行内代码、围栏代码块
+- 代码块支持右上角复制按钮
 - 生成中可点击停止按钮打断；生成中不能发送新消息
 - 类 ChatGPT 浅色界面：左侧会话列表、顶部模型选择、右上角设置菜单
 
@@ -78,6 +80,12 @@ systemctl status relay-chat.service
 
 ```bash
 journalctl -u relay-chat.service -f
+```
+
+修改代码后重新部署当前服务：
+
+```bash
+sudo systemctl restart relay-chat.service
 ```
 
 卸载 systemd 服务：

@@ -1,92 +1,201 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>RelayChat</title>
-  <link rel="stylesheet" href="/static/style.css" />
-  <link rel="icon" href="/static/favicon.ico" sizes="any" />
-</head>
-<body>
-  <aside class="sidebar">
-    <div class="brand"><img src="/static/favicon.ico" alt="" class="brand-icon" />RelayChat</div>
-    <button id="newChat">+ 新会话</button>
-    <div id="sessions" class="sessions"></div>
-  </aside>
-
-  <main class="main">
-    <header>
-      <div class="model-area">
-        <button id="modelSwitcher" class="model-switcher" type="button">
-          <span id="modelLabel">选择模型</span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" class="chevron"><path d="M4.47 6.22a.75.75 0 0 1 1.06 0L8 8.69l2.47-2.47a.75.75 0 1 1 1.06 1.06l-3 3a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 0 1 0-1.06Z" fill="currentColor"></path></svg>
-        </button>
-        <div id="modelMenu" class="model-menu hidden">
-          <label>模型
-            <select id="model"></select>
-          </label>
-          <label>协议
-            <select id="protocol">
-              <option value="anthropic">Anthropic</option>
-              <option value="openai_chat">OpenAI Chat</option>
-              <option value="openai_responses">OpenAI Responses</option>
-            </select>
-          </label>
-        </div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>RelayChat</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="icon" href="/static/favicon.ico" sizes="any" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="/static/favicon.ico" alt="" class="brand-icon" />RelayChat
       </div>
-      <div class="header-actions">
-        <button id="menuToggle" class="icon-btn" type="button" aria-label="更多">⋯</button>
-        <div id="appMenu" class="app-menu hidden">
-          <div class="menu-section settings-panel">
-            <div class="menu-title">设置</div>
-            <label>API URL
-              <input id="baseUrl" placeholder="https://api.openai.com 或 https://api.anthropic.com" />
+      <button id="newChat">+ 新会话</button>
+      <div id="sessions" class="sessions"></div>
+    </aside>
+
+    <main class="main">
+      <header>
+        <div class="model-area">
+          <button id="modelSwitcher" class="model-switcher" type="button">
+            <span id="modelLabel">选择模型</span
+            ><svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+              class="chevron"
+            >
+              <path
+                d="M4.47 6.22a.75.75 0 0 1 1.06 0L8 8.69l2.47-2.47a.75.75 0 1 1 1.06 1.06l-3 3a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 0 1 0-1.06Z"
+                fill="currentColor"
+              ></path>
+            </svg>
+          </button>
+          <div id="modelMenu" class="model-menu hidden">
+            <label
+              >模型
+              <select id="model"></select>
             </label>
-            <label>Token
-              <input id="token" type="password" placeholder="sk-..." />
-            </label>
-            <div class="row">
-              <button id="saveSettings" type="button">保存</button>
-              <button id="loadModels" type="button">获取模型</button>
-            </div>
-            <label>模型
-              <select id="settingsModel"></select>
-            </label>
-            <label>协议
-              <select id="settingsProtocol">
+            <label
+              >协议
+              <select id="protocol">
                 <option value="anthropic">Anthropic</option>
                 <option value="openai_chat">OpenAI Chat</option>
                 <option value="openai_responses">OpenAI Responses</option>
               </select>
             </label>
-            <label class="check"><input id="thinking" type="checkbox" /> 开启 thinking/reasoning</label>
-            <label>Temperature
-              <input id="temperature" type="number" min="0" max="2" step="0.1" placeholder="可空" />
-            </label>
-            <label>Max tokens
-              <input id="maxTokens" type="number" min="1" placeholder="可空" />
-            </label>
-            <label>系统提示词
-              <textarea id="systemPrompt" rows="4" placeholder="可选"></textarea>
-            </label>
-          </div>
-          <div class="menu-section danger-zone">
-            <button id="deleteChat" class="menu-danger" type="button">删除当前会话</button>
-            <button id="deleteAllChats" class="menu-danger" type="button">删除全部会话</button>
           </div>
         </div>
-      </div>
-    </header>
-    <section id="messages" class="messages"></section>
-    <form id="composer" class="composer">
-      <textarea id="input" rows="1" placeholder="输入问题，Enter 发送，Shift+Enter 换行"></textarea>
-      <button id="send" type="submit" aria-label="发送">
-        <svg class="send-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.5a.75.75 0 0 1 .53.22l4.25 4.25a.75.75 0 1 1-1.06 1.06l-2.97-2.97V16a.75.75 0 0 1-1.5 0V6.06L6.28 9.03a.75.75 0 0 1-1.06-1.06l4.25-4.25A.75.75 0 0 1 10 3.5Z" fill="currentColor"></path></svg>
-        <svg class="stop-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect x="5" y="5" width="10" height="10" rx="2" fill="currentColor"></rect></svg>
+        <div class="header-actions">
+          <button
+            id="menuToggle"
+            class="icon-btn"
+            type="button"
+            aria-label="更多"
+          >
+            ⋯
+          </button>
+          <div id="appMenu" class="app-menu hidden">
+            <div class="menu-section settings-panel">
+              <div class="menu-title">设置</div>
+              <label
+                >API URL
+                <input
+                  id="baseUrl"
+                  placeholder="https://api.openai.com 或 https://api.anthropic.com"
+                />
+              </label>
+              <label
+                >Token
+                <input id="token" type="password" placeholder="sk-..." />
+              </label>
+              <div class="row">
+                <button id="saveSettings" type="button">保存</button>
+                <button id="loadModels" type="button">获取模型</button>
+              </div>
+              <label
+                >模型
+                <select id="settingsModel"></select>
+              </label>
+              <label
+                >协议
+                <select id="settingsProtocol">
+                  <option value="anthropic">Anthropic</option>
+                  <option value="openai_chat">OpenAI Chat</option>
+                  <option value="openai_responses">OpenAI Responses</option>
+                </select>
+              </label>
+              <label class="check"
+                ><input id="thinking" type="checkbox" /> 开启
+                thinking/reasoning</label
+              >
+              <label
+                >Temperature
+                <input
+                  id="temperature"
+                  type="number"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  placeholder="可空"
+                />
+              </label>
+              <label
+                >Max tokens
+                <input
+                  id="maxTokens"
+                  type="number"
+                  min="1"
+                  placeholder="可空"
+                />
+              </label>
+              <label
+                >系统提示词
+                <textarea
+                  id="systemPrompt"
+                  rows="4"
+                  placeholder="可选"
+                ></textarea>
+              </label>
+            </div>
+            <div class="menu-section danger-zone">
+              <button id="deleteChat" class="menu-danger" type="button">
+                删除当前会话
+              </button>
+              <button id="deleteAllChats" class="menu-danger" type="button">
+                删除全部会话
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+      <section id="messages" class="messages"></section>
+      <button
+        id="scrollBottom"
+        class="scroll-bottom hidden"
+        type="button"
+        aria-label="滚动到底部"
+      >
+        <svg
+          class="send-icon"
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          aria-hidden="true"
+        >
+          <path
+            d="M10 3.5a.75.75 0 0 1 .53.22l4.25 4.25a.75.75 0 1 1-1.06 1.06l-2.97-2.97V16a.75.75 0 0 1-1.5 0V6.06L6.28 9.03a.75.75 0 0 1-1.06-1.06l4.25-4.25A.75.75 0 0 1 10 3.5Z"
+            fill="currentColor"
+          ></path>
+        </svg>
       </button>
-    </form>
-  </main>
-  <div id="toast" class="toast hidden"></div>
-  <script src="/static/markdown.js"></script>
-  <script src="/static/app.js"></script>
-</body>
+      <form id="composer" class="composer">
+        <textarea
+          id="input"
+          rows="1"
+          placeholder="输入问题，Enter 发送，Shift+Enter 换行"
+        ></textarea>
+        <button id="send" type="submit" aria-label="发送">
+          <svg
+            class="send-icon"
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 20 20"
+            aria-hidden="true"
+          >
+            <path
+              d="M10 3.5a.75.75 0 0 1 .53.22l4.25 4.25a.75.75 0 1 1-1.06 1.06l-2.97-2.97V16a.75.75 0 0 1-1.5 0V6.06L6.28 9.03a.75.75 0 0 1-1.06-1.06l4.25-4.25A.75.75 0 0 1 10 3.5Z"
+              fill="currentColor"
+            ></path>
+          </svg>
+          <svg
+            class="stop-icon"
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 20 20"
+            aria-hidden="true"
+          >
+            <rect
+              x="5"
+              y="5"
+              width="10"
+              height="10"
+              rx="2"
+              fill="currentColor"
+            ></rect>
+          </svg>
+        </button>
+      </form>
+    </main>
+    <div id="toast" class="toast hidden"></div>
+    <script src="/static/markdown.js"></script>
+    <script src="/static/app.js"></script>
+  </body>
 </html>

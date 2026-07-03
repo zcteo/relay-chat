@@ -74,6 +74,8 @@ systemctl is-active relay-chat.service
 sudo systemctl restart relay-chat.service
 ```
 
+只修改 `src/static/` 下的静态前端文件时，不需要重启 systemd 服务；浏览器刷新即可加载新文件。
+
 如果不是 systemd 运行，按开发方式直接启动项目：
 
 ```bash
@@ -301,6 +303,15 @@ openai_responses
 
 修改流式体验时注意不要破坏停止逻辑和 Markdown 渲染。
 
+打字机滚动行为：
+
+- 默认跟随最新消息向下滚动。
+- 用户主动滚动消息区时，自动跟随会暂停，避免阅读开头内容时被拉回底部。
+- 只有用户明确滚动消息区才暂停跟随；程序滚动和打字机输出触发的 `scroll` 事件不能把跟随状态改成暂停。
+- 离底部超过 256px 时，在输入框上方显示 `.scroll-bottom` 悬浮按钮。
+- 点击 `.scroll-bottom` 后立即滚到底部，并恢复后续打字机自动跟随。
+- 小幅离底会暂停自动跟随，但不显示回到底部按钮。
+
 ### Markdown 渲染
 
 AI 正文和 thinking 都需要 Markdown 渲染。
@@ -432,6 +443,8 @@ python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
 - 模型/协议左右两个菜单同步
 - 空会话输入框和提示词在一起
 - 发送后流式输出
+- 打字机输出时向上滚动能暂停自动跟随
+- 点击回到底部按钮后，后续打字机输出能继续自动向下滚动
 - Markdown 正文和 thinking 都能渲染
 - Markdown 分隔线能渲染为横线
 - 缩进围栏代码块能渲染，且代码内容没有额外整体缩进

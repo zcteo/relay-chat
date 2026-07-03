@@ -20,6 +20,9 @@ let state = load()
 let sending = false
 let currentAbort = null
 let generationStopped = false
+let followScroll = true
+let userScrollIntent = false
+let userScrollIntentTimer = null
 
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
@@ -228,7 +231,8 @@ function renderMessages() {
     return
   }
   for (const m of s.messages) box.appendChild(messageEl(m))
-  box.scrollTop = box.scrollHeight
+  scrollMessagesToBottom()
+  updateScrollBottomButton()
 }
 function messageEl(m) {
   const div = document.createElement("div")
@@ -263,7 +267,7 @@ function setError(text) {
   e.className = "error"
   e.textContent = text
   box.appendChild(e)
-  box.scrollTop = box.scrollHeight
+  autoScrollMessages()
 }
 function showToast(text) {
   const el = $("toast")
@@ -304,6 +308,55 @@ async function copyCode(button) {
   } catch {
     showToast("复制失败")
   }
+}
+
+function isMessagesAtBottom() {
+  const box = $("messages")
+  return box.scrollHeight - box.scrollTop - box.clientHeight <= 4
+}
+function shouldShowScrollBottomButton() {
+  const box = $("messages")
+  return box.scrollHeight - box.scrollTop - box.clientHeight > 256
+}
+function updateScrollBottomButton() {
+  const button = $("scrollBottom")
+  if (!button) return
+  const composer = $("composer")
+  if (composer) button.style.bottom = `${composer.offsetHeight + 34}px`
+  const hidden =
+    !shouldShowScrollBottomButton() ||
+    document.querySelector(".main").classList.contains("empty-chat")
+  button.classList.toggle("hidden", hidden)
+}
+function scrollMessagesToBottom() {
+  const box = $("messages")
+  box.scrollTop = box.scrollHeight
+  followScroll = true
+  updateScrollBottomButton()
+}
+function autoScrollMessages() {
+  if (!followScroll) {
+    updateScrollBottomButton()
+    return
+  }
+  scrollMessagesToBottom()
+}
+function markUserScrollIntent() {
+  userScrollIntent = true
+  clearTimeout(userScrollIntentTimer)
+  userScrollIntentTimer = setTimeout(() => {
+    userScrollIntent = false
+  }, 250)
+}
+function clearUserScrollIntentSoon() {
+  clearTimeout(userScrollIntentTimer)
+  userScrollIntentTimer = setTimeout(() => {
+    userScrollIntent = false
+  }, 80)
+}
+function handleMessagesScroll() {
+  if (userScrollIntent) followScroll = isMessagesAtBottom()
+  updateScrollBottomButton()
 }
 
 function createTypewriter(contentEl, thinkingEl) {
@@ -356,7 +409,7 @@ function createTypewriter(contentEl, thinkingEl) {
       contentQueue = got[1]
       contentEl.innerHTML = MarkdownLite.render(shownContent)
     }
-    $("messages").scrollTop = $("messages").scrollHeight
+    autoScrollMessages()
     timer = setTimeout(
       tick,
       nextDelay(contentQueue.length + thinkingQueue.length),
@@ -450,6 +503,7 @@ function autoResizeInput() {
   const next = Math.max(base, Math.min(el.scrollHeight, max))
   el.style.height = next + "px"
   el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden"
+  updateScrollBottomButton()
 }
 async function sendMessage(text) {
   if (sending) return
@@ -518,7 +572,7 @@ async function sendMessage(text) {
           throw new Error(
             typeof ev.error === "string" ? ev.error : JSON.stringify(ev.error),
           )
-        $("messages").scrollTop = $("messages").scrollHeight
+        autoScrollMessages()
       }
     }
     await typer.finish()
@@ -527,6 +581,7 @@ async function sendMessage(text) {
       if (generationStopped && !assistant.content.includes("已停止生成")) {
         assistant.content += (assistant.content ? "\n\n" : "") + "已停止生成"
         contentEl.innerHTML = MarkdownLite.render(assistant.content)
+        autoScrollMessages()
       }
     } else {
       setError("请求失败：" + e.message)
@@ -604,6 +659,21 @@ $("input").addEventListener("keydown", (e) => {
   }
 })
 $("input").addEventListener("input", autoResizeInput)
+$("messages").addEventListener("wheel", markUserScrollIntent, { passive: true })
+$("messages").addEventListener("touchstart", markUserScrollIntent, {
+  passive: true,
+})
+$("messages").addEventListener("touchmove", markUserScrollIntent, {
+  passive: true,
+})
+$("messages").addEventListener("pointerdown", markUserScrollIntent)
+document.addEventListener("pointerup", clearUserScrollIntentSoon)
+$("messages").addEventListener("scroll", handleMessagesScroll)
+$("scrollBottom").onclick = () => {
+  userScrollIntent = false
+  clearTimeout(userScrollIntentTimer)
+  scrollMessagesToBottom()
+}
 window.addEventListener("resize", autoResizeInput)
 function closeMenu() {
   $("appMenu").classList.add("hidden")

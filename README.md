@@ -15,6 +15,7 @@
   - 模型名包含 `claude` -> Anthropic
   - 其他模型 -> OpenAI Chat
 - 支持流式显示和前端逐字输出效果
+- 用户向上查看历史时暂停自动滚动，离底部较远时显示回到底部按钮
 - 支持 thinking/reasoning 展示
 - 支持轻量 Markdown 渲染：标题、列表、引用、分隔线、链接、行内代码、围栏代码块
 - 代码块支持右上角复制按钮
@@ -82,11 +83,13 @@ systemctl status relay-chat.service
 journalctl -u relay-chat.service -f
 ```
 
-修改代码后重新部署当前服务：
+修改后端代码后重新部署当前服务：
 
 ```bash
 sudo systemctl restart relay-chat.service
 ```
+
+只修改 `src/static/` 下的前端静态文件时，刷新浏览器即可生效。
 
 卸载 systemd 服务：
 

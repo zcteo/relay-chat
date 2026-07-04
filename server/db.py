@@ -13,7 +13,6 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   api_base_url TEXT NOT NULL DEFAULT '',
-  api_token TEXT NOT NULL DEFAULT '',
   api_credentials_json TEXT NOT NULL DEFAULT '{}',
   selected_model TEXT NOT NULL DEFAULT '',
   protocol TEXT NOT NULL DEFAULT 'openai_responses',

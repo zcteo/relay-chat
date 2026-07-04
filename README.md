@@ -63,9 +63,11 @@ http://服务器IP:8000
 - 点击“保存”或“获取模型”成功时，会保存当前 URL/Token；切换历史 URL 会自动填入对应 Token，可在同一行点击“删除 URL”移除当前 URL。
 - 转发请求默认带：`X-Origin-Agent: stepcode`。
 - Anthropic 鉴权也使用：`Authorization: Bearer <token>`。
-- 未登录时 API Token 保存在浏览器 `localStorage`；登录后 API Token 会保存到服务器数据库。
+- 未登录时 API Token 保存在浏览器 `localStorage`；登录后 URL/Token 映射会保存到服务器数据库。
 - 生产公网部署建议配合 HTTPS，并配置访问码和注册码。
-- 安全增强计划见 `docs/TODO.md`。
+- API 和数据库结构见 `docs/API.md`。
+- 开发交接说明见 `docs/HANDOFF.md`。
+- 后续计划见 `docs/TODO.md`。
 
 ## systemd 安装
 

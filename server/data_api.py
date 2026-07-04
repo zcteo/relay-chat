@@ -122,14 +122,31 @@ def settings_from_user(row: Any) -> dict[str, Any]:
             api_credentials = {}
     except Exception:
         api_credentials = {}
+    base_url = row["api_base_url"] or ""
     return {
-        "baseUrl": row["api_base_url"] or "",
-        "token": row["api_token"] or "",
+        "baseUrl": base_url,
+        "token": api_credentials.get(base_url, "") if base_url else "",
         "model": row["selected_model"] or "",
         "protocol": row["protocol"] or "openai_responses",
         "models": models,
         "apiCredentials": api_credentials,
     }
+
+
+def normalized_api_credentials(
+    credentials: dict[str, str] | None,
+    base_url: str = "",
+    token: str | None = None,
+) -> dict[str, str]:
+    normalized = {
+        str(url).strip(): str(value).strip()
+        for url, value in (credentials or {}).items()
+        if str(url).strip()
+    }
+    clean_base_url = base_url.strip()
+    if clean_base_url and token is not None:
+        normalized[clean_base_url] = token.strip()
+    return normalized
 
 
 def session_row(row: Any) -> dict[str, Any]:
@@ -248,18 +265,19 @@ async def profile(user: CurrentUser) -> dict[str, Any]:
 
 @router.put("/settings")
 async def put_settings(req: SettingsPayload, user: CurrentUser) -> dict[str, bool]:
+    base_url = req.base_url.strip()
+    api_credentials = normalized_api_credentials(req.api_credentials, base_url, req.token)
     with db() as conn:
         conn.execute(
             """
             UPDATE users
-            SET api_base_url = ?, api_token = ?, api_credentials_json = ?,
+            SET api_base_url = ?, api_credentials_json = ?,
                 selected_model = ?, protocol = ?, models_json = ?, updated_at = ?
             WHERE id = ?
             """,
             (
-                req.base_url.strip(),
-                req.token.strip(),
-                json.dumps(req.api_credentials, ensure_ascii=False),
+                base_url,
+                json.dumps(api_credentials, ensure_ascii=False),
                 req.model.strip(),
                 req.protocol,
                 json.dumps(req.models, ensure_ascii=False),
@@ -272,14 +290,23 @@ async def put_settings(req: SettingsPayload, user: CurrentUser) -> dict[str, boo
 
 @router.patch("/settings")
 async def patch_settings(req: PartialSettingsPayload, user: CurrentUser) -> dict[str, bool]:
+    with db() as conn:
+        current = conn.execute("SELECT api_base_url, api_credentials_json FROM users WHERE id = ?", (user["id"],)).fetchone()
+    try:
+        current_credentials = json.loads(current["api_credentials_json"] or "{}")
+        if not isinstance(current_credentials, dict):
+            current_credentials = {}
+    except Exception:
+        current_credentials = {}
+    base_url = current["api_base_url"] or ""
+    if req.base_url is not None:
+        base_url = req.base_url.strip()
+
     fields: list[str] = []
     values: list[Any] = []
     if req.base_url is not None:
         fields.append("api_base_url = ?")
-        values.append(req.base_url.strip())
-    if req.token is not None:
-        fields.append("api_token = ?")
-        values.append(req.token.strip())
+        values.append(base_url)
     if req.model is not None:
         fields.append("selected_model = ?")
         values.append(req.model.strip())
@@ -289,9 +316,15 @@ async def patch_settings(req: PartialSettingsPayload, user: CurrentUser) -> dict
     if req.models is not None:
         fields.append("models_json = ?")
         values.append(json.dumps(req.models, ensure_ascii=False))
-    if req.api_credentials is not None:
+    if req.api_credentials is not None or req.token is not None or req.base_url is not None:
+        token = req.token if req.token is not None else current_credentials.get(base_url, "")
+        api_credentials = normalized_api_credentials(
+            req.api_credentials if req.api_credentials is not None else current_credentials,
+            base_url,
+            token,
+        )
         fields.append("api_credentials_json = ?")
-        values.append(json.dumps(req.api_credentials, ensure_ascii=False))
+        values.append(json.dumps(api_credentials, ensure_ascii=False))
     if not fields:
         return {"ok": True}
     fields.append("updated_at = ?")
@@ -305,20 +338,21 @@ async def patch_settings(req: PartialSettingsPayload, user: CurrentUser) -> dict
 @router.post("/import-local")
 async def import_local(req: ImportLocalPayload, user: CurrentUser) -> dict[str, bool]:
     now = now_iso()
+    base_url = req.settings.base_url.strip()
+    api_credentials = normalized_api_credentials(req.settings.api_credentials, base_url, req.settings.token)
     with db() as conn:
         conn.execute("DELETE FROM sessions WHERE user_id = ?", (user["id"],))
         conn.execute(
             """
             UPDATE users
-            SET api_base_url = ?, api_token = ?, api_credentials_json = ?,
+            SET api_base_url = ?, api_credentials_json = ?,
                 selected_model = ?, protocol = ?, models_json = ?,
                 first_login_completed = 1, local_upload_offered_at = ?, updated_at = ?
             WHERE id = ?
             """,
             (
-                req.settings.base_url.strip(),
-                req.settings.token.strip(),
-                json.dumps(req.settings.api_credentials, ensure_ascii=False),
+                base_url,
+                json.dumps(api_credentials, ensure_ascii=False),
                 req.settings.model.strip(),
                 req.settings.protocol,
                 json.dumps(req.settings.models, ensure_ascii=False),

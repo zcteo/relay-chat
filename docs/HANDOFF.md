@@ -1,64 +1,63 @@
 # RelayChat 开发交接说明
 
-本文档面向没有历史上下文的新一轮开发，用于快速理解项目现状、约束和后续改动注意事项。
+本文档面向没有历史上下文的新一轮开发，描述当前实现状态和开发约束。接口细节和数据库字段以 `docs/API.md` 为准。
 
 ## 项目目标
 
-这是一个部署在“能访问 AI API 的服务器”上的轻量 AI 问答网站。
+RelayChat 是一个部署在可访问 AI API 的服务器上的轻量问答网站。后端使用 FastAPI 提供静态页面、账号登录、访问认证、SQLite 数据存储和 AI API 转发；前端是静态 HTML/CSS/JS。
 
-核心设计：
+当前产品形态：
 
-- 未登录时，前端保存设置、Token、模型列表和聊天历史到浏览器 `localStorage`。
-- 登录后，服务器用 SQLite 保存 API URL/Token 配置、当前模型、协议、模型列表和对话记录。
-- 后端的 `/api/chat`、`/api/models` 只做 AI API 转发和协议适配。
-- 用户在页面里配置 API Base URL 和 Token。
-- 用户填写的 API URL 不带 `/v1`，转发接口统一拼接 `/v1/...`。
-- 页面风格参考 ChatGPT 浅色界面。
+- 未登录时显示“本地”使用状态，设置、API Token、模型列表和会话历史保存在当前浏览器 `localStorage`。
+- 登录后显示用户名和“注销”，账号数据保存在服务器 SQLite，可多端同步。
+- 第一次登录后，如果当前浏览器存在本地数据，会询问是否上传到服务器账号；上传成功后再询问是否删除当前本地数据。
+- 从登录切换回本地使用时自动注销；如果浏览器里已有本地数据，继续使用原本的本地数据。
+- `/api/chat` 和 `/api/models` 只做上游 AI API 转发和协议适配。
 
-## 当前目录结构
+## 目录结构
 
 ```text
 relay-chat/
-├── README.md              # 面向使用者的启动/安装说明
-├── .gitignore
-├── requirements.txt       # Python 依赖
+├── README.md
+├── requirements.txt
 ├── server/
 │   ├── __init__.py
+│   ├── access.py          # 访问码校验和代理接口认证
 │   ├── auth.py            # 密码哈希、登录 token、当前用户依赖
-│   ├── config.py          # 数据库路径等配置
-│   ├── data_api.py        # 登录、设置、会话、消息等数据 API
-│   ├── db.py              # SQLite 初始化和连接
+│   ├── config.py          # 环境变量和 .env 读取
+│   ├── data_api.py        # 注册、登录、设置、会话、消息 API
+│   ├── db.py              # SQLite schema、初始化和连接
 │   ├── main.py            # FastAPI app、静态文件、路由挂载
-│   └── proxy_api.py       # /api/chat 和 /api/models 转发接口
+│   ├── proxy_api.py       # /api/chat 和 /api/models 转发接口
+│   └── rate_limit.py      # 单进程内存失败限流
 ├── static/
-│   ├── index.html         # 页面结构
-│   ├── app.js             # 前端主逻辑
-│   ├── auth.js            # 前端登录 token 读写
+│   ├── index.html
+│   ├── app.js
+│   ├── auth.js
 │   ├── favicon.ico
-│   ├── markdown.js        # 独立 Markdown 渲染器
-│   ├── storage-local.js   # localStorage 适配器
-│   ├── storage-server.js  # 服务器 API 适配器
-│   └── style.css          # 样式
+│   ├── markdown.js
+│   ├── storage-local.js
+│   ├── storage-server.js
+│   └── style.css
 ├── docs/
-│   ├── HANDOFF.md         # 本文件，面向新开发者
-│   └── TODO.md            # 后续待办事项
+│   ├── API.md
+│   ├── HANDOFF.md
+│   ├── TODO.md
+│   └── index.png
 └── scripts/
-    ├── install.py         # 交互式 systemd 安装脚本
-    └── uninstall.py       # 交互式 systemd 卸载脚本
+    ├── install.py
+    └── uninstall.py
 ```
 
-## 新会话接手顺序
+## 接手顺序
 
-没有历史上下文时，按这个顺序看项目：
+1. 读 `README.md`，了解使用方式和安装方式。
+2. 读本文档，了解当前实现边界和开发约束。
+3. 读 `docs/API.md`，了解后端接口和数据库结构。
+4. 读 `docs/TODO.md`，确认后续计划；TODO 中未勾选项不能当成已实现功能。
+5. 改动前执行 `git status --short`，避免覆盖用户或上一轮会话留下的改动。
 
-1. 先读 `README.md`，了解功能、启动方式和当前公开使用约定。
-2. 再读本文档，本文档是当前实现和开发约束的主文档。
-3. 需要理解账号同步设计背景时，再读 `docs/SERVER_STORAGE_PLAN.md`。该文件是设计记录，当前实现以代码和本文档为准。
-4. 最后看 `docs/TODO.md`，确认哪些内容只是计划，不能当成已实现功能。
-
-改动前先用 `git status --short` 看工作区，避免覆盖用户或上一轮会话留下的改动。
-
-## 运行方式
+## 运行和安装
 
 开发启动：
 
@@ -72,107 +71,98 @@ systemd 安装：
 sudo python3 scripts/install.py
 ```
 
-首次安装依赖系统支持 `python3 -m venv`；Debian/Ubuntu 缺少该能力时先安装 `python3-venv`。
+安装脚本是交互式的，不接收命令行参数。默认安装到当前真实用户的：
 
-安装脚本为交互式，每项可编辑，直接回车使用默认值。默认安装目录为 `~/.local/share/relay-chat`，运行目录和数据目录不得放在源码目录下。
-
-首次安装生成的访问码和注册码只使用大小写字母和数字，避免 shell、URL、复制粘贴场景中的特殊字符歧义。
-
-生产安装时，`server/` 和 `static/` 都从源码目录复制到安装目录。
-
-安装完成输出访问地址时，如果监听地址是 `0.0.0.0`，不要显示不可点击的 `0.0.0.0`，脚本应显示 `127.0.0.1`；如果监听端口是 `80`，访问地址不显示端口。
-
-日志：
-
-```bash
-journalctl -u relay-chat.service -f
+```text
+~/.local/share/relay-chat
 ```
 
-改完代码后的部署/运行方式需要先检测当前环境：
+安装目录结构：
 
-```bash
-systemctl is-active relay-chat.service
+```text
+~/.local/share/relay-chat/
+├── server/
+├── static/
+├── data/
+├── log/
+├── .env
+├── requirements.txt
+├── uninstall.py
+└── .venv/
 ```
 
-如果输出为 `active`，说明当前以 systemd 服务运行。
+安装规则：
 
-只修改普通 Python 后端代码时，直接重启部署：
+- `server/` 和 `static/` 从源码目录复制到安装目录。
+- `data/` 保存 SQLite 数据库。
+- `log/` 保存日志文件路径预留。
+- `.env` 保存服务名、监听地址、端口、访问码、注册码、数据库路径、日志路径等运行配置。
+- systemd unit 是系统级，写入 `/etc/systemd/system/<service>.service`。
+- systemd 运行用户是当前真实用户；用 sudo 执行安装时取 `$SUDO_USER`。
+- 安装脚本会把 `scripts/uninstall.py` 复制到安装目录。
+
+卸载执行安装目录里的脚本：
+
+```bash
+sudo python3 ~/.local/share/relay-chat/uninstall.py
+```
+
+卸载脚本从同目录 `.env` 读取服务名，固定删除 systemd unit，并询问是否删除用户数据。选择删除会移除整个安装目录；选择保留会只删除 `server/` 和 `static/`。
+
+修改后端代码后，如果当前以 systemd 运行：
 
 ```bash
 sudo systemctl restart relay-chat.service
 ```
 
-如果修改了目录结构、服务入口、依赖文件、虚拟环境位置或 `scripts/install.py`，需要重新运行安装脚本生成 systemd unit，不能只 restart：
+修改目录结构、服务入口、依赖、虚拟环境位置或安装脚本后，需要重新运行：
 
 ```bash
 sudo python3 scripts/install.py
 ```
 
-只修改 `static/` 下的静态前端文件时，不需要重启 systemd 服务；浏览器刷新即可加载新文件。
+只修改安装目录中的静态文件时刷新浏览器即可；源码目录中的静态文件变化需要重新安装或手动同步到安装目录。
 
-如果不是 systemd 运行，按开发方式直接启动项目：
+## 后端现状
 
-```bash
-python3 -m uvicorn server.main:app --host 0.0.0.0 --port 8000
-```
+FastAPI 入口是 `server/main.py`。启动时调用 `init_db()` 初始化 SQLite 表。
 
-## 后端说明
+路由模块：
 
-后端入口：
+- `server/data_api.py`：`/api/access`、注册、登录、注销、profile、settings、本地导入、会话和消息 API。
+- `server/proxy_api.py`：`/api/models` 和 `/api/chat`。
 
-```text
-server/main.py
-```
+完整接口和示例见 `docs/API.md`。
 
-FastAPI 路由：
+### 配置
 
-- `GET /`
-  - 返回 `static/index.html`
-- `GET /api/access`
-  - 校验未登录访问码；访问码通过 `X-Access-Code` header 传入
-- `POST /api/models`
-  - 请求上游：`<baseUrl>/v1/models`
-  - 已登录用 `Authorization: Bearer <token>`，未登录用 `X-Access-Code`
-  - 定义在 `server/proxy_api.py`
-- `POST /api/chat`
-  - 根据协议转发到不同上游接口，并统一输出内部 SSE 事件
-  - 已登录用 `Authorization: Bearer <token>`，未登录用 `X-Access-Code`
-  - 定义在 `server/proxy_api.py`
-- `POST /api/register`
-  - 注册账号，不自动登录；配置 `REGISTRATION_CODE` 后必须传 `registrationCode`
-- `POST /api/login`
-  - 登录账号，生成 7 天滑动有效期 token
-- `POST /api/logout`
-  - 注销当前 token
-- `GET /api/profile`
-  - 返回账号信息和服务器保存的 AI 配置，并清理过期/撤销 token
-- `PUT/PATCH /api/settings`
-  - 保存服务器账号下的当前 API URL、当前 API Token、多组 URL/Token、当前模型、协议和模型列表
-- `POST /api/import-local`、`POST /api/import-local/skip`
-  - 新用户首次登录后的本地数据导入或跳过导入
-- `/api/sessions...`、`/api/sessions/{session_id}/messages`
-  - 服务器账号下的会话和消息读写
+`server/config.py` 只负责读取环境变量和 `.env`，不存放需要人工修改的部署配置。
 
-静态文件路径使用 `Path(__file__)` 推导，不依赖进程工作目录：
+后续修改监听地址、端口、数据库路径、日志路径、访问码、注册码等部署配置时，只改安装目录 `.env` 或 systemd `EnvironmentFile`，不要修改 Python 源码。
 
-```python
-PROJECT_DIR = Path(__file__).resolve().parent.parent
-STATIC_DIR = PROJECT_DIR / "static"
-```
+真实环境变量优先级高于 `.env`。
 
-### 配置约定
+### 账号和 token
 
-`server/config.py` 只负责读取环境变量和安装目录下 `.env` 提供的配置，不存放需要人工修改的部署配置。
+- 用户表和用户设置合并在 `users` 表。
+- 用户、登录 token、会话、消息 ID 都是 SQLite 自增整数。
+- 同一用户支持多端登录；每个设备一条 `login_tokens` 记录。
+- 前端保存登录 token 明文；服务器只保存 `token_hash`。
+- token 使用滑动有效期；成功使用 token 会刷新过期时间。
+- `GET /api/profile` 会清理过期或已注销 token。
 
-后续修改监听地址、端口、数据库路径、日志路径、访问码、注册码等部署配置时，只改 `.env` 或 systemd `EnvironmentFile`，不要修改 Python 源码。
+### 访问认证
 
-当前 `config.py` 会读取项目根目录或安装目录下的 `.env`，并保留开发环境默认值；真实环境变量优先级高于 `.env`。
+- `ACCESS_CODE` 为空时，未登录本地使用和代理接口按开发开放模式放行。
+- `ACCESS_CODE` 非空时，未登录进入页面先通过 `GET /api/access` 校验访问码。
+- 未登录调用 `/api/chat`、`/api/models` 必须带 `X-Access-Code`。
+- 已登录调用 `/api/chat`、`/api/models` 带 `Authorization: Bearer <token>`，不需要访问码。
+- `REGISTRATION_CODE` 为空时开放注册；非空时注册请求必须传 `registrationCode`。
+- 限流是单进程内存限流，只记录失败尝试；多进程或多实例部署需要改成 Redis、Nginx 或网关限流。
 
-`scripts/install.py` 是当前安装入口，不接收命令行参数。它会交互式生成 `.env`，默认安装到当前真实用户的 `~/.local/share/relay-chat`，并写入系统级 systemd unit。安装时会把 `scripts/uninstall.py` 复制到安装目录，卸载时执行安装目录里的 `uninstall.py`；它从自身所在目录的 `.env` 读取服务名，固定删除 systemd unit，并询问是否删除用户数据，不再询问服务名和安装目录。
+### 代理协议
 
-### 协议枚举
-
-后端协议值为：
+协议值：
 
 ```text
 anthropic
@@ -180,15 +170,14 @@ openai_chat
 openai_responses
 ```
 
-对应接口：
+上游接口：
 
 ```text
 anthropic        -> POST /v1/messages
 openai_chat      -> POST /v1/chat/completions
 openai_responses -> POST /v1/responses
+models           -> GET  /v1/models
 ```
-
-### Header 约定
 
 所有上游请求都带：
 
@@ -204,69 +193,43 @@ Anthropic 额外带：
 anthropic-version: 2023-06-01
 ```
 
-不要再加 `anthropic-beta`，之前已经明确删除。
+不要恢复 `anthropic-beta` header，也不要把 Anthropic 鉴权改成 `x-api-key`。
 
-### URL 约定
+用户填写的 API URL 按“不带 `/v1`”处理，后端统一拼接 `/v1/...`。
 
-用户填写的 URL 永远按“不带 `/v1`”处理。
+thinking/reasoning 规则：
 
-后端直接拼接：
+- `openai_chat`：传 `thinking: {"type": "enabled" | "disabled"}`。
+- `openai_responses`：开启时传 OpenAI `reasoning: {"effort": "medium", "summary": "auto"}`。
+- `anthropic`：关闭时传 `thinking: {"type": "disabled"}`，开启时不传 `thinking` 字段。
 
-```python
-clean_base_url(req.base_url) + "/v1/models"
-clean_base_url(req.base_url) + "/v1/messages"
-clean_base_url(req.base_url) + "/v1/chat/completions"
-clean_base_url(req.base_url) + "/v1/responses"
-```
-
-### 后端流式输出给前端的事件格式
-
-后端统一输出 SSE，每个事件为：
+后端统一输出内部 SSE：
 
 ```text
 data: {"type":"content","delta":"..."}\n\n
 data: {"type":"thinking","delta":"..."}\n\n
+data: {"type":"usage","usage":{...}}\n\n
 data: {"type":"error","error":"..."}\n\n
 data: {"type":"done"}\n\n
 ```
 
-前端只依赖这几种内部事件。
+## 前端现状
 
-### 日志与脱敏
+前端主逻辑在 `static/app.js`。
 
-参数校验失败日志通过 `safe_json_body()` 脱敏，避免 token 出现在日志中。
+模块划分：
 
-已脱敏字段：
-
-```text
-token
-authorization
-api_key
-apikey
-x-api-key
-```
-
-继续改日志时注意不要记录明文 token。
-
-## 前端说明
-
-前端主逻辑：
-
-```text
-static/app.js
-```
-
-Markdown 渲染：
-
-```text
-static/markdown.js
-```
+- `static/auth.js`：登录 token 和访问码的 localStorage 读写。
+- `static/storage-local.js`：未登录本地存储适配器。
+- `static/storage-server.js`：登录后服务器 API 适配器。
+- `static/markdown.js`：Markdown 渲染器。
+- `static/style.css`：所有样式和主题变量。
 
 不要把 Markdown 渲染逻辑塞回 `app.js`。
 
-### localStorage 和服务器存储
+### localStorage
 
-本地存储 key：
+当前 key：
 
 ```js
 const LOCAL_STATE_KEY = "relaychat-state-v1";
@@ -274,7 +237,7 @@ const SERVER_AUTH_KEY = "relaychat-server-auth-v1";
 const ACCESS_CODE_KEY = "relaychat-access-code-v1";
 ```
 
-状态大致结构：
+本地状态包含：
 
 ```js
 {
@@ -283,7 +246,7 @@ const ACCESS_CODE_KEY = "relaychat-access-code-v1";
     protocol,
     baseUrl,
     token,
-    apiCredentials, // { [baseUrl]: token }
+    apiCredentials,
     model,
     models,
     thinking,
@@ -291,144 +254,45 @@ const ACCESS_CODE_KEY = "relaychat-access-code-v1";
     maxTokens,
     systemPrompt
   },
-  sessions: [
-    {
-      id,
-      title,
-      titleSource,
-      createdAt,
-      updatedAt,
-      messages: [
-        { role: 'user' | 'assistant', content, thinking? }
-      ]
-    }
-  ],
+  sessions,
   currentId
 }
 ```
 
-未登录时，设置和历史只存在浏览器本地。
+未登录时，设置和历史只存在浏览器本地。登录后，通过 `storage-server.js` 读写服务器账号数据。
 
-配置 `ACCESS_CODE` 后，未登录首次进入页面会弹站内访问码输入框。访问码校验接口是 `GET /api/access`，前端通过 `X-Access-Code` header 传访问码，校验成功后把访问码明文保存到 `ACCESS_CODE_KEY`。未登录调用 `/api/chat`、`/api/models` 时也带同一个 `X-Access-Code`。如果后端返回 `401`，前端会清除本地访问码并重新弹访问码输入框。
-
-登录后，服务器保存：
-
-```text
-api_base_url
-api_token
-api_credentials_json
-selected_model
-protocol
-models_json
-sessions
-messages
-```
-
-用户表、会话表、消息表、登录 token 表的主键都是 SQLite `INTEGER PRIMARY KEY AUTOINCREMENT`。
-
-`settings.apiCredentials` 和 `users.api_credentials_json` 保存多组 URL/Token，结构为 `{ "https://api.example.com": "sk-..." }`，URL 是唯一 key。当前使用的 URL/Token 仍同时保存在 `baseUrl`/`token` 和 `api_base_url`/`api_token`，用于聊天和模型转发请求。
-
-登录 token 明文只保存在前端；服务器只保存 `token_hash`。`GET /api/profile` 每次请求会清理 `login_tokens` 表中过期或已撤销的 token。
-
-`settings.models` 只用于模型下拉列表和账号同步保存，不要把不相关的本地状态传给 `/api/chat`、`/api/models`。
-
-### 会话标题来源
-
-`session.titleSource` 表示标题来源：
-
-```text
-default -> 默认/临时标题
-model   -> 模型自动总结标题
-user    -> 用户手动重命名
-```
-
-旧数据可能没有 `titleSource`，按 `default` 处理。
-
-新会话首次回复后，如果 `titleSource` 缺失或为 `default`，前端会异步调用当前模型，只根据第一次用户消息和第一次助手回复生成简短标题，并更新左侧会话列表。
-
-如果 `titleSource` 为 `user`，说明用户手动重命名过，自动标题生成绝对不能覆盖。
-
-标题生成请求有独立的 `AbortController`。切换会话、新建会话、删除会话、清空会话、用户重命名、再次发送消息时，都需要取消正在运行的标题生成请求，避免后台辅助请求长时间占用上游连接。
-
-标题生成请求有 30 秒前端超时，超时后自动 abort；它是辅助功能，不能因为上游模型长时间 thinking 阻塞用户继续使用。
-
-### 协议选择 UI
-
-页面上有两处模型/协议选择：
-
-1. 左上角模型名点击后的弹层
-2. 右上角三点菜单里的设置区
-
-这是用户明确要求的，不要当成重复 UI 删除。
-
-两处应保持同步。
-
-### API URL/Token UI
+### API URL 和 Token
 
 设置里的 API URL 是自定义 combobox：
 
-- 左侧是可编辑输入框。
+- 左侧可编辑输入框。
 - 右侧箭头展开已保存 URL 列表。
-- 选择某个已保存 URL 后，自动把对应 Token 填入 Token 输入框。
+- 选择已保存 URL 后自动带出对应 Token。
 - 点击“保存”时保存当前 URL/Token 到 `apiCredentials`。
-- “获取模型”成功后也保存当前 URL/Token，并用最新请求结果覆盖 `settings.models`。
-- “删除 URL”和“保存”“获取模型”在同一行，删除当前输入框里的 URL。
-- 未登录和已登录状态都使用同一套行为；未登录保存到 localStorage，已登录保存到服务器账号。
-- 不使用原生 `select`/`datalist`，因为需要稳定支持自定义样式、删除 URL 和自动带出 Token。
+- “获取模型”成功后也保存当前 URL/Token，并用接口结果覆盖 `settings.models`。
+- “删除 URL”和“保存”“获取模型”在同一行。
+- 未登录和已登录状态使用同一套行为；未登录保存到 localStorage，已登录保存到服务器账号。
+- 服务器只保存当前 `baseUrl` 和 `apiCredentials` 映射；返回给前端的 `token` 由 `apiCredentials[baseUrl]` 派生。
 
-### 外观设置
+不要改成原生 `select`/`datalist`，当前需求需要自定义样式、删除 URL 和自动带出 Token。
 
-设置菜单里有外观选择：
+### 模型和协议
 
-```text
-自动
-浅色
-深色
-```
+模型字段和 API URL 一样是自定义 combobox：
 
-value 分别为：
+- 左侧可输入模型名。
+- 右侧箭头展开已保存模型列表。
+- 模型列表为空时显示“暂无已保存模型”。
+- 输入列表外模型名后，失焦或按 Enter 会保存为当前模型，并加入 `settings.models`。
+- 点击“获取模型”成功后，接口返回列表直接覆盖 `settings.models`。
 
-```text
-auto
-light
-dark
-```
-
-默认值为 `auto`，保存在 `state.settings.theme`。自动模式使用 `prefers-color-scheme` 跟随浏览器/系统主题切换。
-
-主题通过 `document.documentElement.dataset.theme` 和 `dataset.resolvedTheme` 应用：
-
-- `data-theme` 保存用户选择：`auto` / `light` / `dark`
-- `data-resolved-theme` 保存当前实际主题：`light` / `dark`
-
-浅色和深色主题不要拆成两个 CSS 文件。当前主题差异主要是颜色 token，统一放在 `static/style.css` 的 CSS 变量里维护，避免重复布局规则。
-
-协议下拉顺序必须为：
+协议下拉顺序：
 
 ```text
 Anthropic
 OpenAI Chat
 OpenAI Responses
 ```
-
-value 分别为：
-
-```text
-anthropic
-openai_chat
-openai_responses
-```
-
-### 模型切换自动推断协议
-
-模型字段和 API URL 一样使用自定义 combobox：
-
-- 左侧可直接输入模型名。
-- 右侧箭头展开当前已保存模型列表。
-- 模型列表为空时显示“暂无已保存模型”。
-- 输入模型列表外的模型名后，失焦或按 Enter 会保存为当前模型，并加入 `settings.models`。
-- 点击“获取模型”成功后，使用接口返回的模型列表直接覆盖 `settings.models`，不保留用户手动输入但接口列表里没有的模型。
-- 顶部模型弹层和设置里的模型字段保持同步。
 
 切换模型时自动推断协议：
 
@@ -437,54 +301,44 @@ openai_responses
 其他模型          -> openai_chat
 ```
 
-用户仍可以手动把协议改成 `openai_responses`。
+用户仍可以手动选择 `openai_responses`。不要增加 `auto` 协议项。
 
-不要引入 `auto` 协议项。
+页面上有两处模型/协议选择：
 
-### 聊天发送与停止
+1. 顶部模型名点击后的弹层。
+2. 右上角三点菜单里的设置区。
+
+两处需要保持同步，不要当成重复 UI 删除。
+
+### 聊天和流式输出
 
 生成中：
 
 - 不允许发送新消息。
-- Enter 不触发停止，也不发送。
+- Enter 不触发停止。
 - 只有鼠标点击停止按钮才中断当前生成。
-- 停止后需要显示 `已停止生成`。
-- 即使 AI 已经输出了一部分内容，停止后也要在当前 assistant 消息末尾追加 `已停止生成`。
+- 停止后在当前 assistant 消息末尾追加 `已停止生成`。
 
 停止通过 `AbortController` 实现。
 
-### 流式显示
+后端是真流式，前端还有打字机平滑显示：
 
-后端是真流式，前端另有“打字机”平滑显示。
+- 缓冲多时加速追赶。
+- 缓冲少时慢速输出。
+- 用户主动向上滚动时暂停自动跟随。
+- 离底部超过 256px 时显示回到底部按钮。
+- 点击回到底部按钮后恢复自动跟随。
 
-当前 `createTypewriter()` 使用动态速度：
+### Markdown
 
-- 缓冲多时加速追赶
-- 缓冲少时慢速输出，避免“吐完一片停很久”
+AI 正文和 thinking 都需要 Markdown 渲染；用户消息保持纯文本。
 
-修改流式体验时注意不要破坏停止逻辑和 Markdown 渲染。
-
-打字机滚动行为：
-
-- 默认跟随最新消息向下滚动。
-- 用户主动滚动消息区时，自动跟随会暂停，避免阅读开头内容时被拉回底部。
-- 只有用户明确滚动消息区才暂停跟随；程序滚动和打字机输出触发的 `scroll` 事件不能把跟随状态改成暂停。
-- 离底部超过 256px 时，在输入框上方显示 `.scroll-bottom` 悬浮按钮。
-- 点击 `.scroll-bottom` 后立即滚到底部，并恢复后续打字机自动跟随。
-- 小幅离底会暂停自动跟随，但不显示回到底部按钮。
-
-### Markdown 渲染
-
-AI 正文和 thinking 都需要 Markdown 渲染。
-
-用户消息保持纯文本。
-
-`markdown.js` 当前是轻量实现，支持：
+`markdown.js` 支持：
 
 - 标题
 - 列表
 - 引用
-- 分隔线：`---`、`***`、`___`，支持超过 3 个字符，也支持中间有空格
+- 分隔线
 - 代码块
 - 行内代码
 - 粗体
@@ -493,121 +347,97 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 
 渲染前会 HTML 转义，避免执行模型输出的 HTML。
 
-代码块注意事项：
+代码块输出为 `.code-block` 容器，复制按钮逻辑在 `app.js` 中用事件委托处理，不放进 `markdown.js`。
 
-- 围栏支持反引号和波浪线：`````、`~~~`。
-- 围栏前允许多个空格；渲染时会按开围栏的缩进整体剥掉代码内容缩进。
-- 代码块输出为 `.code-block` 容器，里面包含右上角 `.copy-code` 复制按钮和 `<pre><code>`。
-- 复制按钮逻辑在 `app.js`，使用事件委托绑定到 `.copy-code`；不要把复制逻辑塞进 `markdown.js`。
-- 复制优先使用 Clipboard API，失败/非安全上下文时使用 textarea 兜底。
-- 代码块图标使用本地内联 SVG，不引用外站 sprite。
+### 外观和移动端
 
-### 空会话布局
-
-新会话/空会话时，提示词和输入框放在一起，类似 ChatGPT：
+外观设置：
 
 ```text
-今天想聊点什么？
-[ 输入框 ]
+自动 -> auto
+浅色 -> light
+深色 -> dark
 ```
 
-通过 `.main.empty-chat` 控制。
+主题通过 `document.documentElement.dataset.theme` 和 `dataset.resolvedTheme` 应用。
 
-有消息后输入框回到底部。
+移动端布局：
 
-### 会话列表
-
-左侧会话列表行为：
-
-- 点击会话切换。
-- 鼠标悬停显示三点按钮。
-- 三点菜单包含：
-  1. 重命名
-  2. 删除
-- 当前重命名使用站内自定义弹窗，不使用浏览器原生 `prompt`。
-- TODO 中要求未来改为直接编辑。
-- 当前“新会话”按钮行为类似 ChatGPT：如果已经存在空白新会话，不重复创建。
+- 侧边栏默认收起。
+- 顶部第一行包含三横按钮、站点图标、站点标题和右侧三点按钮。
+- 侧边栏弹出后右上角有关闭按钮。
+- 移动端不显示第二行模型菜单。
+- 设置菜单贴近当前 header 高度，避免底部溢出屏幕。
 
 ## UI 约束
 
-整体视觉目标：ChatGPT 风格浅色界面。
+整体目标是类 ChatGPT 的中性浅色/深色界面：
 
-关键点：
+- 左侧浅灰侧边栏。
+- 顶部模型选择。
+- 右上角三点设置菜单。
+- 底部悬浮输入框。
+- 空会话时提示词和输入框居中组合。
+- 用户消息右侧气泡。
+- AI 消息不使用大色块。
+- thinking 区域为引用块风格。
 
-- 左侧浅灰侧边栏
-- 顶部左侧模型选择
-- 顶部右侧三点设置菜单
-- 底部悬浮输入框
-- 空会话时输入框居中到提示词下方
-- 用户消息右侧浅灰气泡
-- AI 消息无大色块
-- thinking 区域为浅灰引用块
-- 浅色/深色主题都应接近 ChatGPT 对应主题的中性色风格
+弹窗统一使用站内自定义弹窗，不使用浏览器原生 `alert`、`confirm`、`prompt`。
 
-图标不直接引用 ChatGPT 私有 sprite 路径 `/cdn/assets/...`，因为本站会 404。
+图标使用本地内联 SVG。不要引用 ChatGPT 私有 sprite 路径或外站 sprite。
 
-当前做法：使用内联 SVG 实现相似图标：
+`static/style.css` 使用 Prettier 多行格式。JS 文件使用项目当前 Prettier 风格，不要为了单个改动重排无关文件。
 
-- 模型下拉箭头
-- 发送按钮
-- 停止按钮
-- 代码块复制按钮
+## 日志和安全
 
-`static/style.css` 已使用 Prettier 格式化为多行 CSS。后续修改样式时保持可读格式，不要压回单行。
+不要把 token、访问码、注册码写入日志。
 
-所有 JS 文件采用 Prettier 格式化和无分号风格。后续新增或修改 JS 时保持同一格式，不要重新引入行尾分号。
+`server/main.py` 的请求校验失败日志会脱敏以下字段：
 
-## 安全现状
-
-当前已有应用内注册、登录、账号同步、访问码认证、注册码注册和进程内失败限流。
-
-访问认证规则：
-
-- `ACCESS_CODE` 未配置时，未登录本地使用和代理接口按开发开放模式放行。
-- `ACCESS_CODE` 已配置时，未登录进入页面先通过 `GET /api/access` 校验访问码。
-- 未登录调用 `/api/chat`、`/api/models` 必须带 `X-Access-Code`。
-- 已登录调用 `/api/chat`、`/api/models` 带 `Authorization: Bearer <token>`，不需要访问码。
-- `REGISTRATION_CODE` 未配置时允许开放注册；已配置时注册请求必须传 `registrationCode`。
-- 限流是单进程内存限流，只记录失败尝试；多进程或多实例部署需要换成 Redis、Nginx 或网关限流。
-
-公网裸露风险主要包括：
-
-- 资源滥用：长连接、并发、带宽
-- 被当代理跳板
-- 登录后 API Token 保存到服务器 SQLite 数据库，需要配合 HTTPS 和服务器文件权限保护
-
-相关增强已经写在 `docs/TODO.md`：
-
-- 安装脚本生成访问码和注册码
-
-## 未来开发注意事项
-
-1. 不要把 Token 打到日志里。
-2. 不要恢复 `x-api-key` Anthropic 鉴权，目前要求 Bearer。
-3. 不要恢复 `anthropic-beta` header。
-4. 不要让用户填写带 `/v1` 的 URL 作为默认假设。
-5. 不要把 Markdown 渲染逻辑混进 `app.js`。
-6. 不要删除右上角设置里的模型/协议选择。
-7. 不要增加 `auto` 协议选项。
-8. 生成中不要允许发送新消息。
-9. 停止按钮只能鼠标点击触发，不能由 Enter 触发。
-10. 修改目录结构时，同步 `scripts/install.py` 的 `uvicorn server.main:app`。
-11. 修改功能或数据结构时，不考虑旧数据同步、旧数据迁移、旧 localStorage 兼容；按新逻辑直接覆盖。
-12. 不要把部署配置写死到 Python 文件里；`server/config.py` 只做环境变量读取和默认值处理。
-13. 提交代码前需要先按项目约定格式化代码；JS 使用 Prettier 无分号风格，CSS 保持 Prettier 多行格式。
-14. 访问码和注册码不要写入日志；校验失败日志也必须脱敏。
-
-## 快速验证清单
-
-改动后至少验证：
-
-```bash
-python3 -m py_compile server/main.py server/proxy_api.py server/data_api.py server/auth.py server/db.py server/config.py
-python3 -m py_compile scripts/install.py scripts/uninstall.py
-python3 -m uvicorn server.main:app --host 0.0.0.0 --port 8000
+```text
+token
+authorization
+api_key
+apikey
+x-api-key
+x-access-code
+registrationcode
+registration_code
 ```
 
-修改前端 JS 后，需要执行语法检查：
+公网部署建议：
+
+- 使用 HTTPS。
+- 配置访问码和注册码。
+- 限制 systemd 运行用户权限。
+- 保护安装目录 `.env` 和 SQLite 数据库文件权限。
+- 如需多进程或多实例部署，把内存限流迁移到共享存储或网关。
+
+## 开发注意事项
+
+1. 登录后首页并行请求 `/api/profile` 和 `/api/sessions`。
+2. 部署配置只写入环境变量或 `.env`；`server/config.py` 只做配置读取和默认值处理。
+3. 用户填写的 API URL 按不带 `/v1` 处理。
+4. 用户设置保存在 `users` 表，不存在独立 `user_settings` 表。
+5. 账号 API Token 只存放在 `users.api_credentials_json` 的 URL/Token 映射中。
+6. 用户、登录 token、会话、消息 ID 都使用 SQLite 自增整数。
+7. 登录 token 明文只返回给前端，数据库只保存 token hash。
+8. 代理接口日志不能记录明文 API Token。
+9. 顶部模型菜单和右上角设置菜单都保留模型/协议选择，并保持同步。
+10. 协议取值只有 `anthropic`、`openai_chat`、`openai_responses`。
+11. Markdown 渲染逻辑保留在 `static/markdown.js`。
+12. 不考虑旧数据迁移和旧 localStorage 兼容；按当前结构直接覆盖。
+
+## 验证清单
+
+后端和脚本语法：
+
+```bash
+python3 -m py_compile server/main.py server/proxy_api.py server/data_api.py server/auth.py server/db.py server/config.py server/access.py server/rate_limit.py
+python3 -m py_compile scripts/install.py scripts/uninstall.py
+```
+
+前端 JS 语法：
 
 ```bash
 node --check static/markdown.js
@@ -617,33 +447,30 @@ node --check static/storage-server.js
 node --check static/app.js
 ```
 
-浏览器验证：
+文档格式：
 
-- 首页可打开
-- 未配置 `ACCESS_CODE` 时，未登录可直接进入本地界面
-- 配置 `ACCESS_CODE` 时，未登录首次打开会出现访问码弹窗
-- 访问码错误返回 `401`，连续错误触发 `429`
-- 访问码正确后进入本地界面，并保存到 `relaychat-access-code-v1`
-- 未登录获取模型和聊天请求会带 `X-Access-Code`
-- `/static/app.js`、`/static/auth.js`、`/static/storage-local.js`、`/static/storage-server.js`、`/static/markdown.js`、`/static/style.css` 可加载
-- 未登录时可以本地使用
-- 设置里未登录显示“登录”，登录后显示用户名和“注销”
-- 配置 `REGISTRATION_CODE` 后，注册需要输入注册码和两次密码，注册成功后返回登录界面
-- 登录后 `/api/profile` 和 `/api/sessions` 正常加载
-- 登录后获取模型和聊天请求会带登录 token，不需要访问码
-- API URL 输入框右侧箭头能展开已保存 URL，选择后自动带出 Token
-- 保存或获取模型成功后会记录当前 URL/Token；删除 URL 后该项不再出现在下拉列表
-- 获取模型成功后顶部 toast 提示
-- 模型输入列表外名称后，失焦会保存到模型列表；模型列表为空时右侧下拉显示“暂无已保存模型”
-- 模型/协议左右两个菜单同步
-- 空会话输入框和提示词在一起
-- 外观设置可在自动/浅色/深色之间切换
-- 自动外观跟随浏览器或系统深浅色设置
-- 发送后流式输出
-- 打字机输出时向上滚动能暂停自动跟随
-- 点击回到底部按钮后，后续打字机输出能继续自动向下滚动
-- Markdown 正文和 thinking 都能渲染
-- Markdown 分隔线能渲染为横线
-- 缩进围栏代码块能渲染，且代码内容没有额外整体缩进
-- 代码块右上角复制按钮不占用额外一行，点击后能复制代码
-- 生成中点击停止显示 `已停止生成`
+```bash
+npx prettier --check README.md docs/API.md docs/HANDOFF.md docs/TODO.md
+```
+
+手工浏览器验证：
+
+- 首页可打开。
+- 未配置 `ACCESS_CODE` 时，未登录可直接进入本地界面。
+- 配置 `ACCESS_CODE` 时，未登录首次打开出现访问码弹窗。
+- 访问码错误返回 `401`，连续错误触发 `429`。
+- 访问码正确后进入本地界面，并保存到 `relaychat-access-code-v1`。
+- 未登录获取模型和聊天请求带 `X-Access-Code`。
+- 设置里未登录显示“登录”，登录后显示用户名和“注销”。
+- 配置 `REGISTRATION_CODE` 后，注册需要注册码和两次相同密码。
+- 注册成功后返回登录界面。
+- 登录后 `/api/profile` 和 `/api/sessions` 正常加载。
+- 登录后获取模型和聊天请求带登录 token。
+- API URL 下拉、保存、删除、自动带出 Token 正常。
+- 模型下拉、手动输入、空列表提示正常。
+- 模型/协议两个菜单同步。
+- 空会话输入框和提示词在一起。
+- 外观设置可切换自动/浅色/深色。
+- 发送后流式输出，thinking 和正文都能渲染 Markdown。
+- 生成中点击停止显示 `已停止生成`。
+- 移动端侧边栏默认收起，三横按钮可打开，关闭按钮可关闭。

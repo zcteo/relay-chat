@@ -69,10 +69,16 @@ http://服务器IP:8000
 
 ## systemd 安装
 
+首次安装前需要系统支持 Python 虚拟环境；Debian/Ubuntu 可先安装：
+
+```bash
+sudo apt install python3-venv
+```
+
 安装并启动服务：
 
 ```bash
-sudo ./scripts/install.sh
+sudo python3 scripts/install.py
 ```
 
 默认配置：
@@ -81,19 +87,28 @@ sudo ./scripts/install.sh
 服务名: relay-chat
 监听: 0.0.0.0:8000
 运行用户: 当前用户；sudo 执行时为 sudo 调用用户
+安装目录: ~/.local/share/relay-chat
 ```
 
-参数形式覆盖默认值：
+安装脚本为交互式，每个选项可编辑，直接回车使用默认值。首次安装会生成仅包含大小写字母和数字的访问码、注册码，并写入安装目录下的 `.env`。
 
-```bash
-sudo ./scripts/install.sh --service-name relay-chat --host 127.0.0.1 --port 8000 --user zzc
+安装目录结构：
+
+```text
+~/.local/share/relay-chat/
+├── server/
+├── static/
+├── data/
+├── log/
+├── .env
+├── requirements.txt
+├── uninstall.py
+└── .venv/
 ```
 
-如果使用 Nginx/Caddy 做 HTTPS 反代，推荐只监听本机：
+生产安装时，`server/` 和 `static/` 都从源码目录复制到安装目录。
 
-```bash
-sudo ./scripts/install.sh --host 127.0.0.1 --port 8000
-```
+监听地址为 `0.0.0.0` 时，安装完成输出的访问地址显示为 `127.0.0.1`；监听端口为 `80` 时，访问地址不显示端口。
 
 查看状态：
 
@@ -118,11 +133,7 @@ sudo systemctl restart relay-chat.service
 卸载 systemd 服务：
 
 ```bash
-sudo ./scripts/uninstall.sh
+sudo python3 ~/.local/share/relay-chat/uninstall.py
 ```
 
-卸载自定义服务名：
-
-```bash
-sudo ./scripts/uninstall.sh --service-name relay-chat
-```
+卸载脚本会在安装时复制到安装目录。卸载时执行安装目录里的 `uninstall.py`，它会从安装目录 `.env` 读取服务名，固定删除 systemd unit，并询问是否删除用户数据。选择删除会移除整个安装目录；选择保留会只删除安装目录下的 `server/` 和 `static/`。

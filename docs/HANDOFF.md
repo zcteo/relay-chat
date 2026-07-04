@@ -43,8 +43,8 @@ relay-chat/
 │   ├── HANDOFF.md         # 本文件，面向新开发者
 │   └── TODO.md            # 后续待办事项
 └── scripts/
-    ├── install.sh         # systemd 安装脚本
-    └── uninstall.sh       # systemd 卸载脚本
+    ├── install.py         # 交互式 systemd 安装脚本
+    └── uninstall.py       # 交互式 systemd 卸载脚本
 ```
 
 ## 新会话接手顺序
@@ -69,14 +69,18 @@ python3 -m uvicorn server.main:app --host 0.0.0.0 --port 8000
 systemd 安装：
 
 ```bash
-sudo ./scripts/install.sh
+sudo python3 scripts/install.py
 ```
 
-使用反向代理/HTTPS 时推荐：
+首次安装依赖系统支持 `python3 -m venv`；Debian/Ubuntu 缺少该能力时先安装 `python3-venv`。
 
-```bash
-sudo ./scripts/install.sh --host 127.0.0.1 --port 8000
-```
+安装脚本为交互式，每项可编辑，直接回车使用默认值。默认安装目录为 `~/.local/share/relay-chat`，运行目录和数据目录不得放在源码目录下。
+
+首次安装生成的访问码和注册码只使用大小写字母和数字，避免 shell、URL、复制粘贴场景中的特殊字符歧义。
+
+生产安装时，`server/` 和 `static/` 都从源码目录复制到安装目录。
+
+安装完成输出访问地址时，如果监听地址是 `0.0.0.0`，不要显示不可点击的 `0.0.0.0`，脚本应显示 `127.0.0.1`；如果监听端口是 `80`，访问地址不显示端口。
 
 日志：
 
@@ -98,10 +102,10 @@ systemctl is-active relay-chat.service
 sudo systemctl restart relay-chat.service
 ```
 
-如果修改了目录结构、服务入口、依赖文件、虚拟环境位置或 `scripts/install.sh`，需要重新运行安装脚本生成 systemd unit，不能只 restart：
+如果修改了目录结构、服务入口、依赖文件、虚拟环境位置或 `scripts/install.py`，需要重新运行安装脚本生成 systemd unit，不能只 restart：
 
 ```bash
-sudo ./scripts/install.sh
+sudo python3 scripts/install.py
 ```
 
 只修改 `static/` 下的静态前端文件时，不需要重启 systemd 服务；浏览器刷新即可加载新文件。
@@ -164,7 +168,7 @@ STATIC_DIR = PROJECT_DIR / "static"
 
 当前 `config.py` 会读取项目根目录或安装目录下的 `.env`，并保留开发环境默认值；真实环境变量优先级高于 `.env`。
 
-当前 `scripts/install.sh` 仍是旧版参数式安装：直接在源码目录创建 `.venv`，systemd `WorkingDirectory` 也指向源码目录。交互式安装、默认安装到 `~/.local/share/relay-chat`、生成 `.env`、压缩混淆 JS 仍在 `docs/TODO.md`，尚未实现。
+`scripts/install.py` 是当前安装入口，不接收命令行参数。它会交互式生成 `.env`，默认安装到当前真实用户的 `~/.local/share/relay-chat`，并写入系统级 systemd unit。安装时会把 `scripts/uninstall.py` 复制到安装目录，卸载时执行安装目录里的 `uninstall.py`；它从自身所在目录的 `.env` 读取服务名，固定删除 systemd unit，并询问是否删除用户数据，不再询问服务名和安装目录。
 
 ### 协议枚举
 
@@ -265,9 +269,9 @@ static/markdown.js
 本地存储 key：
 
 ```js
-const LOCAL_STATE_KEY = "relaychat-state-v1"
-const SERVER_AUTH_KEY = "relaychat-server-auth-v1"
-const ACCESS_CODE_KEY = "relaychat-access-code-v1"
+const LOCAL_STATE_KEY = "relaychat-state-v1";
+const SERVER_AUTH_KEY = "relaychat-server-auth-v1";
+const ACCESS_CODE_KEY = "relaychat-access-code-v1";
 ```
 
 状态大致结构：
@@ -575,7 +579,6 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 相关增强已经写在 `docs/TODO.md`：
 
 - 安装脚本生成访问码和注册码
-- 生产安装时压缩并混淆 JS
 
 ## 未来开发注意事项
 
@@ -588,7 +591,7 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 7. 不要增加 `auto` 协议选项。
 8. 生成中不要允许发送新消息。
 9. 停止按钮只能鼠标点击触发，不能由 Enter 触发。
-10. 修改目录结构时，同步 `scripts/install.sh` 的 `uvicorn server.main:app`。
+10. 修改目录结构时，同步 `scripts/install.py` 的 `uvicorn server.main:app`。
 11. 修改功能或数据结构时，不考虑旧数据同步、旧数据迁移、旧 localStorage 兼容；按新逻辑直接覆盖。
 12. 不要把部署配置写死到 Python 文件里；`server/config.py` 只做环境变量读取和默认值处理。
 13. 提交代码前需要先按项目约定格式化代码；JS 使用 Prettier 无分号风格，CSS 保持 Prettier 多行格式。
@@ -600,9 +603,18 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 
 ```bash
 python3 -m py_compile server/main.py server/proxy_api.py server/data_api.py server/auth.py server/db.py server/config.py
-bash -n scripts/install.sh
-bash -n scripts/uninstall.sh
+python3 -m py_compile scripts/install.py scripts/uninstall.py
 python3 -m uvicorn server.main:app --host 0.0.0.0 --port 8000
+```
+
+修改前端 JS 后，需要执行语法检查：
+
+```bash
+node --check static/markdown.js
+node --check static/auth.js
+node --check static/storage-local.js
+node --check static/storage-server.js
+node --check static/app.js
 ```
 
 浏览器验证：

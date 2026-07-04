@@ -1,5 +1,4 @@
 const $ = (id) => document.getElementById(id)
-const KEY = "relaychat-state-v1"
 const TITLE_GENERATION_TIMEOUT_MS = 30000
 
 const defaultState = {
@@ -8,6 +7,7 @@ const defaultState = {
     protocol: "openai_responses",
     baseUrl: "",
     token: "",
+    apiCredentials: {},
     model: "",
     models: [],
     thinking: false,
@@ -18,7 +18,11 @@ const defaultState = {
   sessions: [],
   currentId: null,
 }
-let state = load()
+let serverAuth = RelayAuth.loadServerAuth()
+let serverReady = !serverAuth?.token
+let state = serverAuth?.token
+  ? structuredClone(defaultState)
+  : RelayLocalStorage.load(defaultState)
 let sending = false
 let currentAbort = null
 let titleAbort = null
@@ -31,26 +35,283 @@ let userScrollIntentTimer = null
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
-function load() {
-  try {
-    const loaded = {
-      ...structuredClone(defaultState),
-      ...(JSON.parse(localStorage.getItem(KEY)) || {}),
+function showModal({
+  title = "提示",
+  message = "",
+  confirmText = "确定",
+  cancelText = "取消",
+  showCancel = false,
+  input = false,
+  defaultValue = "",
+} = {}) {
+  return new Promise((resolve) => {
+    const modal = $("customModal")
+    const inputWrap = $("modalInputWrap")
+    const inputEl = $("modalInput")
+    const cancel = $("modalCancel")
+    const confirm = $("modalConfirm")
+
+    $("modalTitle").textContent = title
+    $("modalMessage").textContent = message
+    confirm.textContent = confirmText
+    cancel.textContent = cancelText
+    cancel.classList.toggle("hidden", !showCancel)
+    inputWrap.classList.toggle("hidden", !input)
+    inputEl.value = defaultValue || ""
+    modal.classList.remove("hidden")
+
+    function cleanup(value) {
+      modal.classList.add("hidden")
+      confirm.onclick = null
+      cancel.onclick = null
+      inputEl.onkeydown = null
+      resolve(value)
     }
-    loaded.settings = {
-      ...structuredClone(defaultState.settings),
-      ...(loaded.settings || {}),
+
+    confirm.onclick = () => cleanup(input ? inputEl.value : true)
+    cancel.onclick = () => cleanup(input ? null : false)
+    inputEl.onkeydown = (e) => {
+      if (e.key === "Enter") cleanup(inputEl.value)
+      if (e.key === "Escape") cleanup(null)
     }
-    return loaded
-  } catch {
-    return structuredClone(defaultState)
-  }
+    if (input) setTimeout(() => inputEl.focus(), 0)
+    else setTimeout(() => confirm.focus(), 0)
+  })
+}
+function showAlert(message, title = "提示") {
+  return showModal({ title, message, showCancel: false })
+}
+function showConfirm(message, title = "确认") {
+  return showModal({ title, message, showCancel: true })
+}
+function showPrompt(message, defaultValue = "", title = "输入") {
+  return showModal({
+    title,
+    message,
+    input: true,
+    defaultValue,
+    showCancel: true,
+  })
+}
+function saveServerAuth(auth) {
+  serverAuth = auth
+  RelayAuth.saveServerAuth(auth)
+}
+function loadLocal() {
+  return RelayLocalStorage.load(defaultState)
 }
 function save() {
-  localStorage.setItem(KEY, JSON.stringify(state))
+  if (!isServerMode()) RelayLocalStorage.save(state)
 }
 function current() {
   return state.sessions.find((s) => s.id === state.currentId)
+}
+function isServerMode() {
+  return !!serverAuth?.token
+}
+function hasLocalData() {
+  return RelayLocalStorage.hasData()
+}
+function clearLocalData() {
+  RelayLocalStorage.clear()
+}
+function handleTokenExpired() {
+  saveServerAuth(null)
+  serverReady = true
+  state = loadLocal()
+  render()
+  renderAuthGate()
+}
+function hideGates() {
+  $("authGate").classList.add("hidden")
+}
+function renderAccountStatus() {
+  const status = $("accountStatus")
+  if (!status) return
+  const username = serverAuth?.user?.username
+  status.textContent =
+    isServerMode() && username ? `已登录：${username}` : "未登录，正在本地使用"
+  $("openLogin").classList.toggle("hidden", isServerMode() && !!username)
+  $("logoutAccount").classList.toggle("hidden", !(isServerMode() && !!username))
+}
+function renderAuthGate() {
+  $("authGate").classList.remove("hidden")
+  renderLoginView()
+  renderAccountStatus()
+}
+function renderLoginView() {
+  $("authTitle").textContent = "登录"
+  $("authIntro").textContent = "登录后可通过账号同步 API 配置和对话记录。"
+  $("authPasswordConfirmWrap").classList.add("hidden")
+  $("loginButton").classList.remove("hidden")
+  $("registerButton").classList.remove("hidden")
+  $("backToLoginButton").classList.add("hidden")
+  $("submitRegisterButton").classList.add("hidden")
+  $("authPassword").value = ""
+  $("authPasswordConfirm").value = ""
+  setTimeout(() => $("authUsername").focus(), 0)
+}
+function renderRegisterView() {
+  $("authTitle").textContent = "注册"
+  $("authIntro").textContent = "创建账号后返回登录界面。"
+  $("authPasswordConfirmWrap").classList.remove("hidden")
+  $("loginButton").classList.add("hidden")
+  $("registerButton").classList.add("hidden")
+  $("backToLoginButton").classList.remove("hidden")
+  $("submitRegisterButton").classList.remove("hidden")
+  $("authPassword").value = ""
+  $("authPasswordConfirm").value = ""
+  setTimeout(() => $("authUsername").focus(), 0)
+}
+function applyServerSettings(settings) {
+  state.settings = {
+    ...structuredClone(defaultState.settings),
+    theme: state.settings.theme || defaultState.settings.theme,
+    ...(settings || {}),
+  }
+  state.settings.apiCredentials = normalizeApiCredentials(
+    state.settings.apiCredentials,
+  )
+}
+async function loadServerHome() {
+  if (!serverAuth?.token) {
+    serverReady = false
+    renderAuthGate()
+    return
+  }
+  serverReady = false
+  hideGates()
+  try {
+    const data = await RelayServerStorage.loadHome(
+      serverAuth,
+      handleTokenExpired,
+    )
+    saveServerAuth({ ...serverAuth, user: data.profile.user })
+    state = structuredClone(defaultState)
+    applyServerSettings(data.profile.settings)
+    state.sessions = data.sessions
+    state.currentId = null
+    serverReady = true
+    render()
+    autoResizeInput()
+  } catch (e) {
+    if (serverAuth) showToast(e.message)
+  }
+}
+async function authenticate(path) {
+  const username = $("authUsername").value.trim()
+  const password = $("authPassword").value
+  if (!username || !password) return showAlert("请输入用户名和密码")
+  const data = await RelayServerStorage.authenticate(path, username, password)
+  saveServerAuth({ token: data.token, user: data.user })
+  hideGates()
+  await loadServerHome()
+  await maybeOfferLocalUpload(data.shouldOfferLocalUpload)
+}
+async function registerAccount() {
+  const username = $("authUsername").value.trim()
+  const password = $("authPassword").value
+  const confirmPassword = $("authPasswordConfirm").value
+  if (!username || !password || !confirmPassword)
+    return showAlert("请输入用户名和两次密码")
+  if (password !== confirmPassword) return showAlert("两次输入的密码不一致")
+  await RelayServerStorage.authenticate("/api/register", username, password)
+  await showAlert("注册完成，请登录")
+  renderLoginView()
+}
+async function maybeOfferLocalUpload(shouldOffer) {
+  if (!shouldOffer || !hasLocalData()) {
+    if (shouldOffer)
+      await RelayServerStorage.skipImport(serverAuth, handleTokenExpired)
+    return
+  }
+  if (!(await showConfirm("是否将当前浏览器里的本地数据上传到服务器账号？"))) {
+    await RelayServerStorage.skipImport(serverAuth, handleTokenExpired)
+    return
+  }
+  const localState = loadLocal()
+  await RelayServerStorage.importLocal(
+    serverAuth,
+    handleTokenExpired,
+    localState,
+  )
+  showToast("本地数据已上传到服务器")
+  if (await showConfirm("上传成功，是否删除当前浏览器里的本地数据？"))
+    clearLocalData()
+  await loadServerHome()
+}
+async function saveServerSettings(patch = null) {
+  if (!isServerMode() || !serverReady || !serverAuth?.token) return
+  try {
+    await RelayServerStorage.saveSettings(
+      serverAuth,
+      handleTokenExpired,
+      state,
+      patch,
+    )
+  } catch (e) {
+    console.warn("保存服务器设置失败", e)
+  }
+}
+async function selectSession(id) {
+  if (state.currentId !== id) cancelTitleGeneration()
+  state.currentId = id
+  closeSessionMenus()
+  if (isServerMode()) {
+    const s = current()
+    if (s && !s.messagesLoaded) {
+      try {
+        s.messages = await RelayServerStorage.loadMessages(
+          serverAuth,
+          handleTokenExpired,
+          id,
+        )
+        s.messagesLoaded = true
+      } catch (e) {
+        showToast(e.message)
+      }
+    }
+  } else {
+    save()
+  }
+  render()
+}
+async function createServerSessionFromText(text) {
+  const title = text.slice(0, 24).replace(/\s+/g, " ") || "新会话"
+  const session = await RelayServerStorage.createSession(
+    serverAuth,
+    handleTokenExpired,
+    title,
+  )
+  state.sessions.unshift(session)
+  state.currentId = session.id
+  return session
+}
+async function saveServerMessage(session, message) {
+  if (!isServerMode() || !session?.id || session.isTemporary) return null
+  try {
+    return await RelayServerStorage.createMessage(
+      serverAuth,
+      handleTokenExpired,
+      session,
+      message,
+    )
+  } catch (e) {
+    showToast("保存消息失败：" + e.message)
+    return null
+  }
+}
+async function updateServerSession(session) {
+  if (!isServerMode() || !session?.id || session.isTemporary) return
+  try {
+    await RelayServerStorage.updateSession(
+      serverAuth,
+      handleTokenExpired,
+      session,
+    )
+  } catch (e) {
+    showToast("保存会话失败：" + e.message)
+  }
 }
 function cancelTitleGeneration(sessionId = null) {
   if (!titleAbort) return
@@ -60,6 +321,7 @@ function cancelTitleGeneration(sessionId = null) {
   titleAbortSessionId = null
 }
 function ensureSession() {
+  if (isServerMode()) return
   if (!state.sessions.length) newSession()
   if (!state.currentId) state.currentId = state.sessions[0].id
 }
@@ -73,6 +335,11 @@ function isBlankSession(s) {
 }
 function newSession() {
   cancelTitleGeneration()
+  if (isServerMode()) {
+    state.currentId = null
+    render()
+    return
+  }
   const cur = current()
   if (isBlankSession(cur)) {
     render()
@@ -110,39 +377,130 @@ function syncSettingsToUI() {
   $("temperature").value = s.temperature ?? ""
   $("maxTokens").value = s.maxTokens ?? ""
   $("systemPrompt").value = s.systemPrompt || ""
+  renderSavedBaseUrls()
   renderModels()
 }
+function normalizeApiCredentials(credentials) {
+  const out = {}
+  for (const [url, token] of Object.entries(credentials || {})) {
+    const cleanUrl = String(url || "").trim()
+    if (cleanUrl) out[cleanUrl] = String(token || "")
+  }
+  return out
+}
+function rememberCurrentCredential() {
+  const baseUrl = $("baseUrl").value.trim()
+  const token = $("token").value.trim()
+  state.settings.apiCredentials = normalizeApiCredentials(
+    state.settings.apiCredentials,
+  )
+  if (baseUrl) state.settings.apiCredentials[baseUrl] = token
+}
 function syncSettingsFromUI() {
+  rememberCurrentCredential()
+  const model =
+    $("settingsModel").value.trim() ||
+    $("model").value.trim() ||
+    state.settings.model
   Object.assign(state.settings, {
     theme: $("theme").value,
     protocol: $("protocol").value,
     baseUrl: $("baseUrl").value.trim(),
     token: $("token").value.trim(),
-    model: $("model").value || state.settings.model,
+    model,
     thinking: $("thinking").checked,
     temperature: $("temperature").value,
     maxTokens: $("maxTokens").value,
     systemPrompt: $("systemPrompt").value,
   })
+  rememberModel(state.settings.model)
   save()
   applyTheme()
+  if (isServerMode() && serverReady) saveServerSettings()
+}
+function renderSavedBaseUrls() {
+  const menu = $("savedBaseUrlMenu")
+  if (!menu) return
+  menu.innerHTML = ""
+  const credentials = normalizeApiCredentials(state.settings.apiCredentials)
+  const urls = Object.keys(credentials).sort()
+  if (!urls.length) {
+    const empty = document.createElement("div")
+    empty.className = "url-combo-empty"
+    empty.textContent = "暂无已保存 URL"
+    menu.appendChild(empty)
+    return
+  }
+  for (const url of urls) {
+    const item = document.createElement("button")
+    item.type = "button"
+    item.className = "url-combo-item"
+    item.textContent = url
+    item.onclick = () => {
+      $("baseUrl").value = url
+      $("token").value = credentials[url] || ""
+      menu.classList.add("hidden")
+      syncSettingsFromUI()
+    }
+    menu.appendChild(item)
+  }
+}
+function closeSavedBaseUrlMenu() {
+  const menu = $("savedBaseUrlMenu")
+  if (menu) menu.classList.add("hidden")
+}
+function normalizeModels(models) {
+  const out = []
+  const seen = new Set()
+  for (const model of models || []) {
+    const id = String(model?.id || model?.name || "").trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    out.push({ ...model, id, name: model.name || id })
+  }
+  return out
+}
+function rememberModel(model) {
+  const id = String(model || "").trim()
+  if (!id) return
+  const models = normalizeModels(state.settings.models)
+  if (!models.some((item) => item.id === id)) models.push({ id, name: id })
+  state.settings.models = models
 }
 function renderModels() {
-  const selects = [$("model"), $("settingsModel")]
-  for (const sel of selects) sel.innerHTML = ""
-  const models = [...(state.settings.models || [])]
-  if (!models.length && state.settings.model)
-    models.push({ id: state.settings.model, name: state.settings.model })
-  for (const m of models) {
-    for (const sel of selects) {
-      const opt = document.createElement("option")
-      opt.value = m.id
-      opt.textContent = m.name || m.id
-      sel.appendChild(opt)
-    }
+  $("model").value = state.settings.model || ""
+  $("settingsModel").value = state.settings.model || ""
+  renderModelOptions("modelOptionsMenu")
+  renderModelOptions("settingsModelOptionsMenu")
+}
+function renderModelOptions(menuId) {
+  const menu = $(menuId)
+  if (!menu) return
+  menu.innerHTML = ""
+  const models = normalizeModels(state.settings.models)
+  if (!models.length) {
+    const empty = document.createElement("div")
+    empty.className = "model-combo-empty"
+    empty.textContent = "暂无已保存模型"
+    menu.appendChild(empty)
+    return
   }
-  if (state.settings.model)
-    for (const sel of selects) sel.value = state.settings.model
+  for (const model of models) {
+    const item = document.createElement("button")
+    item.type = "button"
+    item.className = "model-combo-item"
+    item.textContent = model.name || model.id
+    item.title = model.id
+    item.onclick = () => {
+      setModel(model.id, true)
+      closeModelOptionsMenus()
+    }
+    menu.appendChild(item)
+  }
+}
+function closeModelOptionsMenus() {
+  $("modelOptionsMenu").classList.add("hidden")
+  $("settingsModelOptionsMenu").classList.add("hidden")
 }
 function inferProtocolFromModel(model) {
   return String(model || "")
@@ -179,10 +537,10 @@ function closeSessionMenus() {
     .querySelectorAll(".session-menu")
     .forEach((m) => m.classList.add("hidden"))
 }
-function renameSession(id) {
+async function renameSession(id) {
   const s = state.sessions.find((x) => x.id === id)
   if (!s) return
-  const title = prompt("重命名会话", s.title || "新会话")
+  const title = await showPrompt("重命名会话", s.title || "新会话")
   if (title === null) return
   const next = title.trim()
   if (!next) return
@@ -191,14 +549,23 @@ function renameSession(id) {
   s.titleSource = "user"
   s.updatedAt = Date.now()
   save()
+  await updateServerSession(s)
   renderSessions()
 }
-function deleteSession(id) {
+async function deleteSession(id) {
   const s = state.sessions.find((x) => x.id === id)
-  if (!s || !confirm("删除该会话？")) return
+  if (!s || !(await showConfirm("删除该会话？"))) return
   cancelTitleGeneration(id)
+  if (isServerMode()) {
+    try {
+      await RelayServerStorage.deleteSession(serverAuth, handleTokenExpired, id)
+    } catch (e) {
+      return showToast("删除失败：" + e.message)
+    }
+  }
   state.sessions = state.sessions.filter((x) => x.id !== id)
-  if (state.currentId === id) state.currentId = state.sessions[0]?.id || null
+  if (state.currentId === id)
+    state.currentId = isServerMode() ? null : state.sessions[0]?.id || null
   save()
   render()
 }
@@ -244,13 +611,7 @@ function renderSessions() {
       closeSessionMenus()
       deleteSession(s.id)
     }
-    item.onclick = () => {
-      if (state.currentId !== s.id) cancelTitleGeneration()
-      state.currentId = s.id
-      closeSessionMenus()
-      save()
-      render()
-    }
+    item.onclick = () => selectSession(s.id)
     item.append(name, more, menu)
     $("sessions").appendChild(item)
   }
@@ -258,13 +619,20 @@ function renderSessions() {
 function renderMessages() {
   const box = $("messages")
   box.innerHTML = ""
+  if (isServerMode() && !serverReady) {
+    document.querySelector(".main").classList.add("empty-chat")
+    if (!serverAuth?.token) renderAuthGate()
+    return
+  }
   const s = current()
   const empty = !s || !s.messages.length
   document.querySelector(".main").classList.toggle("empty-chat", empty)
   if (empty) {
     const p = document.createElement("div")
     p.className = "muted"
-    p.textContent = "开始一个新问题，数据只会保存在本地浏览器。"
+    p.textContent = isServerMode()
+      ? "已登录，发送第一条消息后会同步到账号。"
+      : "开始一个新问题，数据只会保存在本地浏览器。"
     box.appendChild(p)
     return
   }
@@ -298,6 +666,7 @@ function render() {
   renderMessages()
   syncSettingsToUI()
   renderModelLabel()
+  renderAccountStatus()
 }
 function setError(text) {
   const box = $("messages")
@@ -484,7 +853,7 @@ function createTypewriter(contentEl, thinkingEl) {
 async function loadModels() {
   syncSettingsFromUI()
   if (!state.settings.baseUrl || !state.settings.token)
-    return alert("请先填写 API URL 和 Token")
+    return showAlert("请先填写 API URL 和 Token")
   $("loadModels").disabled = true
   $("loadModels").textContent = "获取中..."
   try {
@@ -504,11 +873,12 @@ async function loadModels() {
       applyProtocolForModel(state.settings.model)
     }
     save()
+    await saveServerSettings()
     renderModels()
     renderModelLabel()
     showToast(`获取模型成功，已保存（${state.settings.models.length} 个模型）`)
   } catch (e) {
-    alert("获取模型失败：" + e.message)
+    await showAlert("获取模型失败：" + e.message)
   } finally {
     $("loadModels").disabled = false
     $("loadModels").textContent = "获取模型"
@@ -624,6 +994,7 @@ async function generateSessionTitle(sessionId) {
     latest.titleSource = "model"
     latest.updatedAt = Date.now()
     save()
+    await updateServerSession(latest)
     renderSessions()
   } catch (e) {
     if (e.name === "AbortError") return
@@ -658,12 +1029,26 @@ function autoResizeInput() {
 }
 async function sendMessage(text) {
   if (sending) return
+  if (isServerMode() && !serverReady) return renderAuthGate()
   cancelTitleGeneration()
   syncSettingsFromUI()
   if (!state.settings.baseUrl || !state.settings.token || !state.settings.model)
-    return alert("请先配置 URL、Token 并选择模型")
-  const s = current()
-  s.messages.push({ role: "user", content: text })
+    return showAlert("请先配置 URL、Token 并选择模型")
+  let s = current()
+  if (isServerMode() && !s) {
+    try {
+      s = await createServerSessionFromText(text)
+    } catch (e) {
+      return showToast("创建服务器会话失败：" + e.message)
+    }
+  }
+  if (!s) {
+    newSession()
+    s = current()
+  }
+  if (!s.messagesLoaded && isServerMode()) s.messagesLoaded = true
+  const userMessage = { role: "user", content: text, thinking: "" }
+  s.messages.push(userMessage)
   const payloadMessages = requestMessages(s)
   if (!s.title || s.title === "新会话") {
     s.title = text.slice(0, 24).replace(/\s+/g, " ") || "新会话"
@@ -673,6 +1058,8 @@ async function sendMessage(text) {
   s.messages.push(assistant)
   s.updatedAt = Date.now()
   save()
+  await updateServerSession(s)
+  await saveServerMessage(s, userMessage)
   render()
 
   const msgNodes = $("messages").querySelectorAll(".msg.assistant")
@@ -747,26 +1134,40 @@ async function sendMessage(text) {
     setSendingUI(false)
     s.updatedAt = Date.now()
     save()
+    if (assistant.content || assistant.thinking)
+      await saveServerMessage(s, assistant)
     renderSessions()
     if (!wasStopped && assistant.content) generateSessionTitle(s.id)
   }
 }
 
 $("newChat").onclick = newSession
-$("deleteChat").onclick = () => {
+$("deleteChat").onclick = async () => {
   const s = current()
-  if (!s || !confirm("删除当前会话？")) return
-  cancelTitleGeneration(s.id)
-  state.sessions = state.sessions.filter((x) => x.id !== s.id)
-  state.currentId = state.sessions[0]?.id || null
+  if (!s) return
   closeMenu()
-  save()
-  render()
+  await deleteSession(s.id)
 }
-$("deleteAllChats").onclick = () => {
-  if (!state.sessions.length || !confirm("删除全部会话？此操作不可恢复。"))
+$("deleteAllChats").onclick = async () => {
+  if (
+    !state.sessions.length ||
+    !(await showConfirm("删除全部会话？此操作不可恢复。"))
+  )
     return
   cancelTitleGeneration()
+  if (isServerMode()) {
+    for (const s of [...state.sessions]) {
+      try {
+        await RelayServerStorage.deleteSession(
+          serverAuth,
+          handleTokenExpired,
+          s.id,
+        )
+      } catch (e) {
+        return showToast("删除失败：" + e.message)
+      }
+    }
+  }
   state.sessions = []
   state.currentId = null
   closeMenu()
@@ -775,26 +1176,118 @@ $("deleteAllChats").onclick = () => {
 }
 $("saveSettings").onclick = () => {
   syncSettingsFromUI()
-  showToast("设置已保存到浏览器本地")
+  showToast(isServerMode() ? "设置已保存到服务器" : "设置已保存到浏览器本地")
 }
 $("loadModels").onclick = loadModels
-function setModelFromSelect(value, infer = true) {
-  state.settings.model = value
+$("savedBaseUrlToggle").onclick = (e) => {
+  e.stopPropagation()
+  renderSavedBaseUrls()
+  $("savedBaseUrlMenu").classList.toggle("hidden")
+}
+$("savedBaseUrlMenu").onclick = (e) => e.stopPropagation()
+$("deleteSavedBaseUrl").onclick = async () => {
+  const url = $("baseUrl").value.trim()
+  if (!url) return showAlert("请选择要删除的 URL")
+  if (!(await showConfirm(`删除已保存的 URL？\n${url}`))) return
+  state.settings.apiCredentials = normalizeApiCredentials(
+    state.settings.apiCredentials,
+  )
+  delete state.settings.apiCredentials[url]
+  if ($("baseUrl").value.trim() === url) {
+    $("baseUrl").value = ""
+    $("token").value = ""
+    state.settings.baseUrl = ""
+    state.settings.token = ""
+  }
+  save()
+  await saveServerSettings()
+  renderSavedBaseUrls()
+  closeSavedBaseUrlMenu()
+  showToast("已删除保存的 URL")
+}
+function setModel(value, infer = true) {
+  const next = String(value || "").trim()
+  if (!next) {
+    $("model").value = state.settings.model || ""
+    $("settingsModel").value = state.settings.model || ""
+    return
+  }
+  state.settings.model = next
+  rememberModel(next)
   if (infer) applyProtocolForModel(state.settings.model)
   $("model").value = state.settings.model
   $("settingsModel").value = state.settings.model
   save()
+  saveServerSettings({
+    model: state.settings.model,
+    protocol: state.settings.protocol,
+    models: state.settings.models,
+  })
+  renderModels()
   renderModelLabel()
 }
-$("model").onchange = () => setModelFromSelect($("model").value, true)
-$("settingsModel").onchange = () =>
-  setModelFromSelect($("settingsModel").value, true)
+function saveModelInput(inputId) {
+  setModel($(inputId).value, true)
+}
+$("model").addEventListener("blur", () => saveModelInput("model"))
+$("settingsModel").addEventListener("blur", () =>
+  saveModelInput("settingsModel"),
+)
+for (const id of ["model", "settingsModel"]) {
+  $(id).addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return
+    e.preventDefault()
+    $(id).blur()
+  })
+}
+$("modelToggle").onclick = (e) => {
+  e.stopPropagation()
+  renderModelOptions("modelOptionsMenu")
+  $("modelOptionsMenu").classList.toggle("hidden")
+}
+$("settingsModelToggle").onclick = (e) => {
+  e.stopPropagation()
+  renderModelOptions("settingsModelOptionsMenu")
+  $("settingsModelOptionsMenu").classList.toggle("hidden")
+}
+$("modelOptionsMenu").onclick = (e) => e.stopPropagation()
+$("settingsModelOptionsMenu").onclick = (e) => e.stopPropagation()
 $("settingsProtocol").onchange = () => {
   state.settings.protocol = $("settingsProtocol").value
   $("protocol").value = state.settings.protocol
   save()
+  saveServerSettings({ protocol: state.settings.protocol })
   renderModelLabel()
 }
+async function logoutAccount() {
+  if (isServerMode() && serverAuth?.token) {
+    try {
+      await RelayServerStorage.logout(serverAuth)
+    } catch {}
+  }
+  saveServerAuth(null)
+  serverReady = true
+  state = loadLocal()
+  hideGates()
+  closeMenu()
+  render()
+  autoResizeInput()
+}
+async function openLogin() {
+  closeMenu()
+  renderAuthGate()
+}
+$("openLogin").onclick = openLogin
+$("logoutAccount").onclick = logoutAccount
+$("cancelLogin").onclick = () => {
+  hideGates()
+}
+$("loginButton").onclick = () =>
+  authenticate("/api/login").catch((e) => showAlert("登录失败：" + e.message))
+$("registerButton").onclick = renderRegisterView
+$("backToLoginButton").onclick = renderLoginView
+$("submitRegisterButton").onclick = () =>
+  registerAccount().catch((e) => showAlert("注册失败：" + e.message))
 $("send").onclick = (e) => {
   if (sending) {
     e.preventDefault()
@@ -817,7 +1310,9 @@ $("input").addEventListener("keydown", (e) => {
   }
 })
 $("input").addEventListener("input", autoResizeInput)
-$("messages").addEventListener("wheel", markUserScrollIntent, { passive: true })
+$("messages").addEventListener("wheel", markUserScrollIntent, {
+  passive: true,
+})
 $("messages").addEventListener("touchstart", markUserScrollIntent, {
   passive: true,
 })
@@ -839,18 +1334,23 @@ function closeMenu() {
 function toggleMenu() {
   $("appMenu").classList.toggle("hidden")
   $("modelMenu").classList.add("hidden")
+  closeModelOptionsMenus()
 }
 function closeModelMenu() {
   $("modelMenu").classList.add("hidden")
+  closeModelOptionsMenus()
 }
 function toggleModelMenu() {
   $("modelMenu").classList.toggle("hidden")
   $("appMenu").classList.add("hidden")
+  closeModelOptionsMenus()
 }
 function closePopovers() {
   closeMenu()
   closeModelMenu()
   closeSessionMenus()
+  closeSavedBaseUrlMenu()
+  closeModelOptionsMenus()
 }
 $("menuToggle").onclick = (e) => {
   e.stopPropagation()
@@ -875,6 +1375,7 @@ $("protocol").addEventListener("change", () => {
   state.settings.protocol = $("protocol").value
   $("settingsProtocol").value = state.settings.protocol
   save()
+  saveServerSettings({ protocol: state.settings.protocol })
   renderModelLabel()
 })
 for (const id of [
@@ -895,5 +1396,9 @@ if (colorSchemeQuery.addEventListener)
   colorSchemeQuery.addEventListener("change", applyTheme)
 else colorSchemeQuery.addListener(applyTheme)
 applyTheme()
-render()
+if (isServerMode() && serverAuth?.token) {
+  loadServerHome()
+} else {
+  render()
+}
 autoResizeInput()

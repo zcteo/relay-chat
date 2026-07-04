@@ -392,6 +392,59 @@ header {
   box-shadow: 0 10px 30px var(--shadow-menu);
   pointer-events: none;
 }
+.gate {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.24);
+}
+.gate-panel {
+  width: min(420px, 100%);
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 18px 55px var(--shadow-menu);
+  padding: 22px;
+}
+.gate-panel h1 {
+  margin: 0 0 8px;
+  font-size: 22px;
+  line-height: 1.25;
+}
+.gate-panel p {
+  margin: 0 0 16px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.gate-panel label {
+  display: block;
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.gate-panel input {
+  width: 100%;
+  margin-top: 5px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px;
+  outline: none;
+}
+.gate-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+.gate-actions button {
+  flex: 1;
+}
 .model-menu {
   position: absolute;
   left: 0;
@@ -413,6 +466,7 @@ header {
 .model-menu label:last-child {
   margin-bottom: 0;
 }
+.model-menu input,
 .model-menu select {
   width: 100%;
   margin-top: 5px;
@@ -423,6 +477,7 @@ header {
   padding: 9px 10px;
   outline: none;
 }
+.model-menu input:focus,
 .model-menu select:focus {
   border-color: var(--border-focus);
   box-shadow: 0 0 0 2px var(--focus-ring);
@@ -481,6 +536,84 @@ header {
 .app-menu textarea {
   resize: vertical;
 }
+.url-combo,
+.model-combo {
+  position: relative;
+  margin-top: 5px;
+}
+.app-menu .url-combo input,
+.app-menu .model-combo input,
+.model-menu .model-combo input {
+  margin-top: 0;
+  padding-right: 42px;
+}
+.url-combo-toggle,
+.model-combo-toggle {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  bottom: 1px;
+  width: 36px;
+  height: auto;
+  padding: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0 9px 9px 0;
+  background: transparent;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.url-combo-toggle:hover,
+.model-combo-toggle:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+.url-combo-toggle svg,
+.model-combo-toggle svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+.url-combo-menu,
+.model-combo-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  max-height: 220px;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 34px var(--shadow-popover);
+  padding: 6px;
+  z-index: 35;
+}
+.url-combo-item,
+.model-combo-item {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border-radius: 8px;
+  padding: 9px 10px;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.url-combo-item:hover,
+.model-combo-item:hover {
+  background: var(--surface-muted);
+}
+.url-combo-empty,
+.model-combo-empty {
+  padding: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
 .app-menu .check {
   display: flex;
   align-items: center;
@@ -500,6 +633,25 @@ header {
   flex: 1;
   font-size: 13px;
   padding: 9px;
+}
+.mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0 4px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.mode-actions {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.mode-row button {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  font-size: 12px;
 }
 .danger-zone {
   display: flex;

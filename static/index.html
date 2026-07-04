@@ -38,7 +38,32 @@
           <div id="modelMenu" class="model-menu hidden">
             <label
               >模型
-              <select id="model"></select>
+              <div class="model-combo">
+                <input id="model" placeholder="输入或选择模型" />
+                <button
+                  id="modelToggle"
+                  class="model-combo-toggle"
+                  type="button"
+                  aria-label="选择模型"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M4.47 6.22a.75.75 0 0 1 1.06 0L8 8.69l2.47-2.47a.75.75 0 1 1 1.06 1.06l-3 3a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 0 1 0-1.06Z"
+                      fill="currentColor"
+                    ></path>
+                  </svg>
+                </button>
+                <div
+                  id="modelOptionsMenu"
+                  class="model-combo-menu hidden"
+                ></div>
+              </div>
             </label>
             <label
               >协议
@@ -62,6 +87,15 @@
           <div id="appMenu" class="app-menu hidden">
             <div class="menu-section settings-panel">
               <div class="menu-title">设置</div>
+              <div class="mode-row">
+                <span id="accountStatus">未登录，正在本地使用</span>
+                <div class="mode-actions">
+                  <button id="openLogin" type="button">登录</button>
+                  <button id="logoutAccount" class="hidden" type="button">
+                    注销
+                  </button>
+                </div>
+              </div>
               <label
                 >外观
                 <select id="theme">
@@ -72,10 +106,32 @@
               </label>
               <label
                 >API URL
-                <input
-                  id="baseUrl"
-                  placeholder="https://api.openai.com 或 https://api.anthropic.com"
-                />
+                <div class="url-combo">
+                  <input id="baseUrl" placeholder="输入或选择 URL" />
+                  <button
+                    id="savedBaseUrlToggle"
+                    class="url-combo-toggle"
+                    type="button"
+                    aria-label="选择已保存 URL"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 16 16"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M4.47 6.22a.75.75 0 0 1 1.06 0L8 8.69l2.47-2.47a.75.75 0 1 1 1.06 1.06l-3 3a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 0 1 0-1.06Z"
+                        fill="currentColor"
+                      ></path>
+                    </svg>
+                  </button>
+                  <div
+                    id="savedBaseUrlMenu"
+                    class="url-combo-menu hidden"
+                  ></div>
+                </div>
               </label>
               <label
                 >Token
@@ -84,10 +140,36 @@
               <div class="row">
                 <button id="saveSettings" type="button">保存</button>
                 <button id="loadModels" type="button">获取模型</button>
+                <button id="deleteSavedBaseUrl" type="button">删除 URL</button>
               </div>
               <label
                 >模型
-                <select id="settingsModel"></select>
+                <div class="model-combo">
+                  <input id="settingsModel" placeholder="输入或选择模型" />
+                  <button
+                    id="settingsModelToggle"
+                    class="model-combo-toggle"
+                    type="button"
+                    aria-label="选择模型"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 16 16"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M4.47 6.22a.75.75 0 0 1 1.06 0L8 8.69l2.47-2.47a.75.75 0 1 1 1.06 1.06l-3 3a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 0 1 0-1.06Z"
+                        fill="currentColor"
+                      ></path>
+                    </svg>
+                  </button>
+                  <div
+                    id="settingsModelOptionsMenu"
+                    class="model-combo-menu hidden"
+                  ></div>
+                </div>
               </label>
               <label
                 >协议
@@ -125,7 +207,7 @@
                 >系统提示词
                 <textarea
                   id="systemPrompt"
-                  rows="4"
+                  rows="1"
                   placeholder="可选"
                 ></textarea>
               </label>
@@ -202,8 +284,62 @@
         </button>
       </form>
     </main>
+    <div id="authGate" class="gate hidden">
+      <div class="gate-panel">
+        <h1 id="authTitle">登录</h1>
+        <p id="authIntro">登录后可通过账号同步 API 配置和对话记录。</p>
+        <label
+          >用户名
+          <input id="authUsername" autocomplete="username" />
+        </label>
+        <label
+          >密码
+          <input
+            id="authPassword"
+            type="password"
+            autocomplete="current-password"
+          />
+        </label>
+        <label id="authPasswordConfirmWrap" class="hidden"
+          >确认密码
+          <input
+            id="authPasswordConfirm"
+            type="password"
+            autocomplete="new-password"
+          />
+        </label>
+        <div class="gate-actions">
+          <button id="cancelLogin" type="button">取消</button>
+          <button id="loginButton" type="button">登录</button>
+          <button id="registerButton" type="button">注册</button>
+          <button id="backToLoginButton" class="hidden" type="button">
+            返回登录
+          </button>
+          <button id="submitRegisterButton" class="hidden" type="button">
+            完成注册
+          </button>
+        </div>
+      </div>
+    </div>
+    <div id="customModal" class="gate hidden">
+      <div class="gate-panel modal-panel">
+        <h1 id="modalTitle">提示</h1>
+        <p id="modalMessage"></p>
+        <label id="modalInputWrap" class="hidden"
+          >内容
+          <input id="modalInput" />
+        </label>
+        <div class="gate-actions">
+          <button id="modalCancel" type="button">取消</button>
+          <button id="modalConfirm" type="button">确定</button>
+        </div>
+      </div>
+    </div>
     <div id="toast" class="toast hidden"></div>
     <script src="/static/markdown.js"></script>
+    <script src="/static/auth.js"></script>
+    <script src="/static/storage-local.js"></script>
+    <script src="/static/storage-server.js"></script>
     <script src="/static/app.js"></script>
   </body>
 </html>

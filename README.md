@@ -36,6 +36,14 @@
 - 新用户首次登录后，如果浏览器里已有本地数据，会询问是否上传到账号；上传成功后再询问是否删除本地数据。
 - 登录 token 默认 7 天滑动有效期；过期后需要重新登录。
 
+## 访问认证
+
+- 配置 `ACCESS_CODE` 后，未登录首次进入页面需要输入访问码；访问码会明文保存在当前浏览器 `localStorage`。
+- 未登录调用 `/api/chat`、`/api/models` 时会带 `X-Access-Code`，后端每次校验访问码。
+- 登录后调用 `/api/chat`、`/api/models` 使用登录 token，不需要访问码。
+- 配置 `REGISTRATION_CODE` 后，注册账号必须输入注册码。
+- 未配置 `ACCESS_CODE` 或 `REGISTRATION_CODE` 时，对应能力按开发开放模式处理。
+
 ## 启动
 
 ```bash
@@ -56,7 +64,7 @@ http://服务器IP:8000
 - 转发请求默认带：`X-Origin-Agent: stepcode`。
 - Anthropic 鉴权也使用：`Authorization: Bearer <token>`。
 - 未登录时 API Token 保存在浏览器 `localStorage`；登录后 API Token 会保存到服务器数据库。
-- 生产公网部署建议配合 HTTPS，并考虑注册/登录限流、邀请码或关闭开放注册。
+- 生产公网部署建议配合 HTTPS，并配置访问码和注册码。
 - 安全增强计划见 `docs/TODO.md`。
 
 ## systemd 安装

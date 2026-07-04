@@ -124,14 +124,18 @@ FastAPI 路由：
 
 - `GET /`
   - 返回 `static/index.html`
+- `GET /api/access`
+  - 校验未登录访问码；访问码通过 `X-Access-Code` header 传入
 - `POST /api/models`
   - 请求上游：`<baseUrl>/v1/models`
+  - 已登录用 `Authorization: Bearer <token>`，未登录用 `X-Access-Code`
   - 定义在 `server/proxy_api.py`
 - `POST /api/chat`
   - 根据协议转发到不同上游接口，并统一输出内部 SSE 事件
+  - 已登录用 `Authorization: Bearer <token>`，未登录用 `X-Access-Code`
   - 定义在 `server/proxy_api.py`
 - `POST /api/register`
-  - 注册账号，不自动登录
+  - 注册账号，不自动登录；配置 `REGISTRATION_CODE` 后必须传 `registrationCode`
 - `POST /api/login`
   - 登录账号，生成 7 天滑动有效期 token
 - `POST /api/logout`
@@ -263,6 +267,7 @@ static/markdown.js
 ```js
 const LOCAL_STATE_KEY = "relaychat-state-v1"
 const SERVER_AUTH_KEY = "relaychat-server-auth-v1"
+const ACCESS_CODE_KEY = "relaychat-access-code-v1"
 ```
 
 状态大致结构：
@@ -299,6 +304,8 @@ const SERVER_AUTH_KEY = "relaychat-server-auth-v1"
 ```
 
 未登录时，设置和历史只存在浏览器本地。
+
+配置 `ACCESS_CODE` 后，未登录首次进入页面会弹站内访问码输入框。访问码校验接口是 `GET /api/access`，前端通过 `X-Access-Code` header 传访问码，校验成功后把访问码明文保存到 `ACCESS_CODE_KEY`。未登录调用 `/api/chat`、`/api/models` 时也带同一个 `X-Access-Code`。如果后端返回 `401`，前端会清除本地访问码并重新弹访问码输入框。
 
 登录后，服务器保存：
 
@@ -548,19 +555,27 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 
 ## 安全现状
 
-当前已有应用内注册、登录和账号同步，但还没有注册限流、登录限流、邀请码或关闭开放注册配置。
+当前已有应用内注册、登录、账号同步、访问码认证、注册码注册和进程内失败限流。
+
+访问认证规则：
+
+- `ACCESS_CODE` 未配置时，未登录本地使用和代理接口按开发开放模式放行。
+- `ACCESS_CODE` 已配置时，未登录进入页面先通过 `GET /api/access` 校验访问码。
+- 未登录调用 `/api/chat`、`/api/models` 必须带 `X-Access-Code`。
+- 已登录调用 `/api/chat`、`/api/models` 带 `Authorization: Bearer <token>`，不需要访问码。
+- `REGISTRATION_CODE` 未配置时允许开放注册；已配置时注册请求必须传 `registrationCode`。
+- 限流是单进程内存限流，只记录失败尝试；多进程或多实例部署需要换成 Redis、Nginx 或网关限流。
 
 公网裸露风险主要包括：
 
 - 资源滥用：长连接、并发、带宽
 - 被当代理跳板
-- 暴力登录和批量注册
 - 登录后 API Token 保存到服务器 SQLite 数据库，需要配合 HTTPS 和服务器文件权限保护
 
 相关增强已经写在 `docs/TODO.md`：
 
-- 注册/登录限流
-- 邀请码或关闭开放注册
+- 安装脚本生成访问码和注册码
+- 生产安装时压缩并混淆 JS
 
 ## 未来开发注意事项
 
@@ -577,6 +592,7 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 11. 修改功能或数据结构时，不考虑旧数据同步、旧数据迁移、旧 localStorage 兼容；按新逻辑直接覆盖。
 12. 不要把部署配置写死到 Python 文件里；`server/config.py` 只做环境变量读取和默认值处理。
 13. 提交代码前需要先按项目约定格式化代码；JS 使用 Prettier 无分号风格，CSS 保持 Prettier 多行格式。
+14. 访问码和注册码不要写入日志；校验失败日志也必须脱敏。
 
 ## 快速验证清单
 
@@ -592,11 +608,17 @@ python3 -m uvicorn server.main:app --host 0.0.0.0 --port 8000
 浏览器验证：
 
 - 首页可打开
+- 未配置 `ACCESS_CODE` 时，未登录可直接进入本地界面
+- 配置 `ACCESS_CODE` 时，未登录首次打开会出现访问码弹窗
+- 访问码错误返回 `401`，连续错误触发 `429`
+- 访问码正确后进入本地界面，并保存到 `relaychat-access-code-v1`
+- 未登录获取模型和聊天请求会带 `X-Access-Code`
 - `/static/app.js`、`/static/auth.js`、`/static/storage-local.js`、`/static/storage-server.js`、`/static/markdown.js`、`/static/style.css` 可加载
 - 未登录时可以本地使用
 - 设置里未登录显示“登录”，登录后显示用户名和“注销”
-- 注册需要输入两次密码，注册成功后返回登录界面
+- 配置 `REGISTRATION_CODE` 后，注册需要输入注册码和两次密码，注册成功后返回登录界面
 - 登录后 `/api/profile` 和 `/api/sessions` 正常加载
+- 登录后获取模型和聊天请求会带登录 token，不需要访问码
 - API URL 输入框右侧箭头能展开已保存 URL，选择后自动带出 Token
 - 保存或获取模型成功后会记录当前 URL/Token；删除 URL 后该项不再出现在下拉列表
 - 获取模型成功后顶部 toast 提示

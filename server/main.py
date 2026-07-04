@@ -13,7 +13,10 @@ from .db import init_db
 from .proxy_api import router as proxy_router
 
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 logger = logging.getLogger("relay-chat")
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
@@ -32,7 +35,20 @@ async def startup() -> None:
 
 def redact_sensitive(value: Any) -> Any:
     if isinstance(value, dict):
-        return {k: ("***" if k.lower() in {"token", "authorization", "api_key", "apikey", "x-api-key"} else redact_sensitive(v)) for k, v in value.items()}
+        sensitive_keys = {
+            "token",
+            "authorization",
+            "api_key",
+            "apikey",
+            "x-api-key",
+            "x-access-code",
+            "registrationcode",
+            "registration_code",
+        }
+        return {
+            k: ("***" if k.lower() in sensitive_keys else redact_sensitive(v))
+            for k, v in value.items()
+        }
     if isinstance(value, list):
         return [redact_sensitive(v) for v in value]
     return value
@@ -47,9 +63,17 @@ def safe_json_body(raw: bytes) -> str:
 
 
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+async def validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
     body = await request.body()
-    logger.error("请求参数校验失败 path=%s errors=%s body=%s", request.url.path, exc.errors(), safe_json_body(body))
+    logger.error(
+        "请求参数校验失败 path=%s errors=%s body=%s",
+        request.url.path,
+        exc.errors(),
+        safe_json_body(body),
+    )
     return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 

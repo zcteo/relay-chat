@@ -67,11 +67,11 @@ const RelayServerStorage = (() => {
     }
   }
 
-  async function authenticate(path, username, password) {
+  async function authenticate(path, username, password, extra = {}) {
     const resp = await fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, ...extra }),
     })
     return readJsonResponse(resp)
   }

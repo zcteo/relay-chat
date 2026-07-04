@@ -42,6 +42,8 @@ function showModal({
   cancelText = "取消",
   showCancel = false,
   input = false,
+  inputLabel = "内容",
+  inputType = "text",
   defaultValue = "",
 } = {}) {
   return new Promise((resolve) => {
@@ -53,10 +55,12 @@ function showModal({
 
     $("modalTitle").textContent = title
     $("modalMessage").textContent = message
+    $("modalInputLabel").textContent = inputLabel
     confirm.textContent = confirmText
     cancel.textContent = cancelText
     cancel.classList.toggle("hidden", !showCancel)
     inputWrap.classList.toggle("hidden", !input)
+    inputEl.type = inputType
     inputEl.value = defaultValue || ""
     modal.classList.remove("hidden")
 
@@ -96,6 +100,25 @@ function showPrompt(message, defaultValue = "", title = "输入") {
 function saveServerAuth(auth) {
   serverAuth = auth
   RelayAuth.saveServerAuth(auth)
+}
+function accessCode() {
+  return RelayAuth.loadAccessCode()
+}
+function saveAccessCode(code) {
+  RelayAuth.saveAccessCode(code)
+}
+function clearAccessCode() {
+  RelayAuth.clearAccessCode()
+}
+function proxyHeaders() {
+  const headers = { "Content-Type": "application/json" }
+  if (isServerMode() && serverAuth?.token)
+    headers.Authorization = `Bearer ${serverAuth.token}`
+  else {
+    const code = accessCode()
+    if (code) headers["X-Access-Code"] = code
+  }
+  return headers
 }
 function loadLocal() {
   return RelayLocalStorage.load(defaultState)
@@ -143,25 +166,93 @@ function renderLoginView() {
   $("authTitle").textContent = "登录"
   $("authIntro").textContent = "登录后可通过账号同步 API 配置和对话记录。"
   $("authPasswordConfirmWrap").classList.add("hidden")
+  $("authRegistrationCodeWrap").classList.add("hidden")
   $("loginButton").classList.remove("hidden")
   $("registerButton").classList.remove("hidden")
   $("backToLoginButton").classList.add("hidden")
   $("submitRegisterButton").classList.add("hidden")
   $("authPassword").value = ""
   $("authPasswordConfirm").value = ""
+  $("authRegistrationCode").value = ""
   setTimeout(() => $("authUsername").focus(), 0)
 }
 function renderRegisterView() {
   $("authTitle").textContent = "注册"
   $("authIntro").textContent = "创建账号后返回登录界面。"
   $("authPasswordConfirmWrap").classList.remove("hidden")
+  $("authRegistrationCodeWrap").classList.remove("hidden")
   $("loginButton").classList.add("hidden")
   $("registerButton").classList.add("hidden")
   $("backToLoginButton").classList.remove("hidden")
   $("submitRegisterButton").classList.remove("hidden")
   $("authPassword").value = ""
   $("authPasswordConfirm").value = ""
+  $("authRegistrationCode").value = ""
   setTimeout(() => $("authUsername").focus(), 0)
+}
+async function verifyAccessCode(code) {
+  const headers = {}
+  if (code) headers["X-Access-Code"] = code
+  const resp = await fetch("/api/access", { headers })
+  const data = await resp.json().catch(() => ({}))
+  if (!resp.ok) {
+    const err = new Error(data.detail || data.error || resp.statusText)
+    err.status = resp.status
+    throw err
+  }
+  return data
+}
+async function requireLocalAccess() {
+  if (isServerMode()) return true
+  const savedCode = accessCode()
+  if (savedCode) {
+    try {
+      await verifyAccessCode(savedCode)
+      return true
+    } catch (e) {
+      if (e.status === 429) await showAlert("尝试过于频繁，请稍后再试")
+      clearAccessCode()
+    }
+  }
+  try {
+    const data = await verifyAccessCode("")
+    if (!data.accessRequired) return true
+  } catch (e) {
+    if (e.status === 429) await showAlert("尝试过于频繁，请稍后再试")
+  }
+  while (!isServerMode()) {
+    const code = await showModal({
+      title: "访问认证",
+      message: "请输入访问码后继续使用。",
+      input: true,
+      inputLabel: "访问码",
+      inputType: "password",
+      confirmText: "进入",
+      showCancel: false,
+    })
+    if (!code || !String(code).trim()) continue
+    try {
+      await verifyAccessCode(code)
+      saveAccessCode(code)
+      return true
+    } catch (e) {
+      await showAlert(
+        e.status === 429
+          ? "尝试过于频繁，请稍后再试"
+          : "访问码错误，请重新输入",
+      )
+    }
+  }
+  return false
+}
+async function handleProxyUnauthorized() {
+  if (isServerMode()) {
+    handleTokenExpired()
+    throw new Error("登录已过期，请重新登录")
+  }
+  clearAccessCode()
+  await requireLocalAccess()
+  throw new Error("访问认证已失效，请重新发送请求")
 }
 function applyServerSettings(settings) {
   state.settings = {
@@ -212,10 +303,13 @@ async function registerAccount() {
   const username = $("authUsername").value.trim()
   const password = $("authPassword").value
   const confirmPassword = $("authPasswordConfirm").value
+  const registrationCode = $("authRegistrationCode").value.trim()
   if (!username || !password || !confirmPassword)
     return showAlert("请输入用户名和两次密码")
   if (password !== confirmPassword) return showAlert("两次输入的密码不一致")
-  await RelayServerStorage.authenticate("/api/register", username, password)
+  await RelayServerStorage.authenticate("/api/register", username, password, {
+    registrationCode,
+  })
   await showAlert("注册完成，请登录")
   renderLoginView()
 }
@@ -861,10 +955,12 @@ async function loadModels() {
   try {
     const r = await fetch("/api/models", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: proxyHeaders(),
       body: JSON.stringify(apiSettings()),
     })
     const data = await r.json().catch(() => ({}))
+    if (r.status === 401) await handleProxyUnauthorized()
+    if (r.status === 429) throw new Error("尝试过于频繁，请稍后再试")
     if (!r.ok) throw new Error(data.detail || r.statusText)
     state.settings.models = data.models || []
     const hasCurrent = state.settings.models.some(
@@ -973,7 +1069,7 @@ async function generateSessionTitle(sessionId) {
   try {
     const resp = await fetch("/api/chat", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: proxyHeaders(),
       body: JSON.stringify({
         ...apiSettings(),
         thinking: false,
@@ -989,6 +1085,8 @@ async function generateSessionTitle(sessionId) {
       }),
       signal: controller.signal,
     })
+    if (resp.status === 401) await handleProxyUnauthorized()
+    if (resp.status === 429) throw new Error("尝试过于频繁，请稍后再试")
     const title = normalizeGeneratedTitle(await readChatStreamText(resp))
     const latest = state.sessions.find((s) => s.id === sessionId)
     if (!title || !titleCanBeAutoGenerated(latest)) return
@@ -1087,10 +1185,12 @@ async function sendMessage(text) {
     }
     const resp = await fetch("/api/chat", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: proxyHeaders(),
       body: JSON.stringify(payload),
       signal: currentAbort.signal,
     })
+    if (resp.status === 401) await handleProxyUnauthorized()
+    if (resp.status === 429) throw new Error("尝试过于频繁，请稍后再试")
     if (!resp.ok || !resp.body) throw new Error(await resp.text())
     const reader = resp.body.getReader()
     const decoder = new TextDecoder()
@@ -1272,6 +1372,7 @@ async function logoutAccount() {
   state = loadLocal()
   hideGates()
   closeMenu()
+  await requireLocalAccess()
   render()
   autoResizeInput()
 }
@@ -1282,7 +1383,9 @@ async function openLogin() {
 $("openLogin").onclick = openLogin
 $("logoutAccount").onclick = logoutAccount
 $("cancelLogin").onclick = () => {
-  hideGates()
+  requireLocalAccess().then((ok) => {
+    if (ok) hideGates()
+  })
 }
 $("loginButton").onclick = () =>
   authenticate("/api/login").catch((e) => showAlert("登录失败：" + e.message))
@@ -1410,9 +1513,12 @@ if (colorSchemeQuery.addEventListener)
   colorSchemeQuery.addEventListener("change", applyTheme)
 else colorSchemeQuery.addListener(applyTheme)
 applyTheme()
-if (isServerMode() && serverAuth?.token) {
-  loadServerHome()
-} else {
-  render()
+async function boot() {
+  if (isServerMode() && serverAuth?.token) await loadServerHome()
+  else {
+    await requireLocalAccess()
+    render()
+  }
+  autoResizeInput()
 }
-autoResizeInput()
+boot().catch((e) => showAlert("启动失败：" + e.message))

@@ -352,6 +352,10 @@
             autocomplete="new-password"
           />
         </label>
+        <label id="authRegistrationCodeWrap" class="hidden"
+          >注册码
+          <input id="authRegistrationCode" autocomplete="off" />
+        </label>
         <div class="gate-actions">
           <button id="cancelLogin" type="button">取消</button>
           <button id="loginButton" type="button">登录</button>
@@ -369,8 +373,8 @@
       <div class="gate-panel">
         <h1 id="modalTitle">提示</h1>
         <p id="modalMessage"></p>
-        <label id="modalInputWrap" class="hidden"
-          >内容
+        <label id="modalInputWrap" class="hidden">
+          <span id="modalInputLabel">内容</span>
           <input id="modalInput" />
         </label>
         <div class="gate-actions">

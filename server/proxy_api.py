@@ -4,10 +4,11 @@ from collections.abc import AsyncIterator
 from typing import Any, Literal
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from .access import require_proxy_access
 
 Protocol = Literal["openai_chat", "openai_responses", "anthropic"]
 
@@ -51,7 +52,8 @@ def thinking_config(enabled: bool) -> dict[str, str]:
 
 
 @router.post("/models")
-async def models(req: ApiConfig) -> dict[str, Any]:
+async def models(request: Request, req: ApiConfig) -> dict[str, Any]:
+    require_proxy_access(request)
     url = clean_base_url(req.base_url) + "/v1/models"
     safe_headers = {k: ("***" if k.lower() == "authorization" else v) for k, v in headers(req).items()}
     logger.info("获取模型 request protocol=%s url=%s headers=%s", req.protocol, url, safe_headers)
@@ -234,7 +236,8 @@ async def stream_anthropic(req: ChatRequest) -> AsyncIterator[bytes]:
 
 
 @router.post("/chat")
-async def chat(req: ChatRequest) -> StreamingResponse:
+async def chat(request: Request, req: ChatRequest) -> StreamingResponse:
+    require_proxy_access(request)
     if req.protocol == "anthropic":
         gen = stream_anthropic(req)
     elif req.protocol == "openai_chat":

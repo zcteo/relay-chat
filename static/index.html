@@ -11,13 +11,56 @@
     <aside class="sidebar">
       <div class="brand">
         <img src="/static/favicon.ico" alt="" class="brand-icon" />RelayChat
+        <button
+          id="sidebarClose"
+          class="sidebar-close"
+          type="button"
+          aria-label="关闭侧边栏"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 18 18"
+            aria-hidden="true"
+          >
+            <path
+              d="M4.72 3.66a.75.75 0 0 0-1.06 1.06L7.94 9l-4.28 4.28a.75.75 0 1 0 1.06 1.06L9 10.06l4.28 4.28a.75.75 0 1 0 1.06-1.06L10.06 9l4.28-4.28a.75.75 0 0 0-1.06-1.06L9 7.94 4.72 3.66Z"
+              fill="currentColor"
+            ></path>
+          </svg>
+        </button>
       </div>
       <button id="newChat">+ 新会话</button>
       <div id="sessions" class="sessions"></div>
     </aside>
+    <div id="sidebarOverlay" class="sidebar-overlay"></div>
 
     <main class="main">
       <header>
+        <div class="mobile-nav">
+          <button
+            id="sidebarToggle"
+            class="mobile-sidebar-toggle"
+            type="button"
+            aria-label="打开侧边栏"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 20 20"
+              aria-hidden="true"
+            >
+              <path
+                d="M3 5.75A.75.75 0 0 1 3.75 5h12.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 5.75Zm0 4.25a.75.75 0 0 1 .75-.75h12.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 10Zm.75 3.5a.75.75 0 0 0 0 1.5h12.5a.75.75 0 0 0 0-1.5H3.75Z"
+                fill="currentColor"
+              ></path>
+            </svg>
+          </button>
+          <img src="/static/favicon.ico" alt="" class="mobile-brand-icon" />
+          <span class="mobile-brand-title">RelayChat</span>
+        </div>
         <div class="model-area">
           <button id="modelSwitcher" class="model-switcher" type="button">
             <span id="modelLabel">选择模型</span
@@ -85,7 +128,7 @@
             ⋯
           </button>
           <div id="appMenu" class="app-menu hidden">
-            <div class="menu-section settings-panel">
+            <div class="menu-section">
               <div class="menu-title">设置</div>
               <div class="mode-row">
                 <span id="accountStatus">未登录，正在本地使用</span>
@@ -322,7 +365,7 @@
       </div>
     </div>
     <div id="customModal" class="gate hidden">
-      <div class="gate-panel modal-panel">
+      <div class="gate-panel">
         <h1 id="modalTitle">提示</h1>
         <p id="modalMessage"></p>
         <label id="modalInputWrap" class="hidden"

@@ -256,6 +256,7 @@ async function saveServerSettings(patch = null) {
 async function selectSession(id) {
   if (state.currentId !== id) cancelTitleGeneration()
   state.currentId = id
+  closeSidebar()
   closeSessionMenus()
   if (isServerMode()) {
     const s = current()
@@ -335,6 +336,7 @@ function isBlankSession(s) {
 }
 function newSession() {
   cancelTitleGeneration()
+  closeSidebar()
   if (isServerMode()) {
     state.currentId = null
     render()
@@ -1331,6 +1333,12 @@ window.addEventListener("resize", autoResizeInput)
 function closeMenu() {
   $("appMenu").classList.add("hidden")
 }
+function openSidebar() {
+  document.body.classList.add("sidebar-open")
+}
+function closeSidebar() {
+  document.body.classList.remove("sidebar-open")
+}
 function toggleMenu() {
   $("appMenu").classList.toggle("hidden")
   $("modelMenu").classList.add("hidden")
@@ -1363,6 +1371,12 @@ $("modelSwitcher").onclick = (e) => {
 }
 $("appMenu").onclick = (e) => e.stopPropagation()
 $("modelMenu").onclick = (e) => e.stopPropagation()
+$("sidebarToggle").onclick = (e) => {
+  e.stopPropagation()
+  openSidebar()
+}
+$("sidebarClose").onclick = closeSidebar
+$("sidebarOverlay").onclick = closeSidebar
 document.addEventListener("click", closePopovers)
 document.addEventListener("click", (e) => {
   const button = e.target.closest(".copy-code")

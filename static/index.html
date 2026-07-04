@@ -222,10 +222,11 @@
                   <option value="openai_responses">OpenAI Responses</option>
                 </select>
               </label>
-              <label class="check"
-                ><input id="thinking" type="checkbox" /> 开启
-                thinking/reasoning</label
-              >
+              <label class="toggle-setting">
+                <span>开启 thinking/reasoning</span>
+                <input id="thinking" type="checkbox" />
+                <span class="toggle-switch" aria-hidden="true"></span>
+              </label>
               <label
                 >Temperature
                 <input

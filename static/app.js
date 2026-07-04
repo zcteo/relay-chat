@@ -10,7 +10,7 @@ const defaultState = {
     apiCredentials: {},
     model: "",
     models: [],
-    thinking: false,
+    thinking: true,
     temperature: "",
     maxTokens: "",
     systemPrompt: "",

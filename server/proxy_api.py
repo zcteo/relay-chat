@@ -46,6 +46,10 @@ def headers(config: ApiConfig) -> dict[str, str]:
     return h
 
 
+def thinking_config(enabled: bool) -> dict[str, str]:
+    return {"type": "enabled" if enabled else "disabled"}
+
+
 @router.post("/models")
 async def models(req: ApiConfig) -> dict[str, Any]:
     url = clean_base_url(req.base_url) + "/v1/models"
@@ -152,8 +156,7 @@ async def stream_openai_chat(req: ChatRequest) -> AsyncIterator[bytes]:
         body["temperature"] = req.temperature
     if req.max_tokens:
         body["max_tokens"] = req.max_tokens
-    if req.thinking:
-        body["reasoning_effort"] = "medium"
+    body["thinking"] = thinking_config(req.thinking)
 
     async with httpx.AsyncClient(timeout=None) as client:
         url = clean_base_url(req.base_url) + "/v1/chat/completions"
@@ -191,9 +194,8 @@ async def stream_anthropic(req: ChatRequest) -> AsyncIterator[bytes]:
         body["system"] = system
     if req.temperature is not None:
         body["temperature"] = req.temperature
-    if req.thinking:
-        body["thinking"] = {"type": "enabled", "budget_tokens": 1024}
-        body.pop("temperature", None)
+    if not req.thinking:
+        body["thinking"] = thinking_config(False)
 
     async with httpx.AsyncClient(timeout=None) as client:
         url = clean_base_url(req.base_url) + "/v1/messages"

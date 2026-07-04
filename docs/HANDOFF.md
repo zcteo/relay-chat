@@ -100,6 +100,7 @@ sudo python3 scripts/install.py
 - systemd unit 是系统级，写入 `/etc/systemd/system/<service>.service`。
 - systemd 运行用户是当前真实用户；用 sudo 执行安装时取 `$SUDO_USER`。
 - 安装脚本会把 `scripts/uninstall.py` 复制到安装目录。
+- 安装和卸载都需要使用的公共函数统一写在 `scripts/uninstall.py`，`scripts/install.py` 直接导入复用；安装专用逻辑仍保留在 `scripts/install.py`。
 
 卸载执行安装目录里的脚本：
 

@@ -9,12 +9,23 @@ SERVICE_DEFAULT = "relay-chat"
 UNIT_DIR = Path("/etc/systemd/system")
 
 
-def require_root() -> None:
+def require_root(usage: str = "sudo python3 ~/.local/share/relay-chat/uninstall.py") -> None:
     if os.geteuid() != 0:
-        raise SystemExit("请用 root 运行，例如：sudo python3 ~/.local/share/relay-chat/uninstall.py")
+        raise SystemExit(f"请用 root 运行，例如：{usage}")
 
 
-def run(cmd: list[str], *, check: bool = True, quiet: bool = False) -> None:
+def run(
+    cmd: list[str],
+    *,
+    user: str | None = None,
+    check: bool = True,
+    quiet: bool = False,
+) -> None:
+    if user:
+        if shutil.which("sudo"):
+            cmd = ["sudo", "-H", "-u", user, *cmd]
+        else:
+            cmd = ["runuser", "-u", user, "--", *cmd]
     kwargs = {}
     if quiet:
         kwargs = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
@@ -59,8 +70,9 @@ def validate_target(path: Path) -> Path:
     return target
 
 
-def remove_unit(service_name: str, unit_file: Path) -> None:
+def remove_unit(service_name: str, unit_file: Path | None = None) -> None:
     service = f"{service_name}.service"
+    unit_file = unit_file or UNIT_DIR / service
     print(f"==> 停止服务：{service}")
     run(["systemctl", "stop", service], check=False, quiet=True)
     print(f"==> 禁用服务：{service}")
@@ -72,33 +84,46 @@ def remove_unit(service_name: str, unit_file: Path) -> None:
     run(["systemctl", "reset-failed", service], check=False, quiet=True)
 
 
+def remove_runtime_dirs(install_dir: Path) -> None:
+    for name in ("server", "static"):
+        target = install_dir / name
+        if target.exists():
+            shutil.rmtree(target)
+            print(f"已删除：{target}")
+
+
+def cleanup_install(
+    install_dir: Path,
+    service_name: str,
+    *,
+    remove_data: bool,
+) -> None:
+    install_dir = validate_target(install_dir)
+    remove_unit(service_name)
+    if not install_dir.exists():
+        print(f"安装目录不存在：{install_dir}")
+        return
+    if remove_data:
+        shutil.rmtree(install_dir)
+        print(f"已删除安装目录：{install_dir}")
+        return
+    remove_runtime_dirs(install_dir)
+    print("已保留 .env、data、log、.venv 和 requirements.txt")
+
+
 def main() -> None:
     require_root()
     install_dir = default_install_dir()
     service_name = read_env(install_dir / ".env").get("SERVICE_NAME", SERVICE_DEFAULT)
-    unit_file = UNIT_DIR / f"{service_name}.service"
-    install_dir = validate_target(install_dir)
-
-    remove_unit(service_name, unit_file)
-
-    if not install_dir.exists():
-        print(f"安装目录不存在：{install_dir}")
-        return
 
     if ask_yes_no("是否删除用户数据并移除整个安装目录", False):
         confirm = input(f"输入 yes 确认删除整个目录 {install_dir}: ").strip()
         if confirm != "yes":
             print("未确认，保留安装目录")
         else:
-            shutil.rmtree(install_dir)
-            print(f"已删除安装目录：{install_dir}")
+            cleanup_install(install_dir, service_name, remove_data=True)
     else:
-        for name in ("server", "static"):
-            target = install_dir / name
-            if target.exists():
-                shutil.rmtree(target)
-                print(f"已删除：{target}")
-        print("已保留 .env、data、log、.venv 和 requirements.txt")
+        cleanup_install(install_dir, service_name, remove_data=False)
 
     print("==> 卸载完成")
 

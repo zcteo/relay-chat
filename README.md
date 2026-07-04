@@ -69,7 +69,9 @@ http://服务器IP:8000
 - 开发交接说明见 `docs/HANDOFF.md`。
 - 后续计划见 `docs/TODO.md`。
 
-## systemd 安装
+## 安装
+
+会安装为 systemd 服务
 
 首次安装前需要系统支持 Python 虚拟环境；Debian/Ubuntu 可先安装：
 
@@ -108,10 +110,6 @@ sudo python3 scripts/install.py
 └── .venv/
 ```
 
-生产安装时，`server/` 和 `static/` 都从源码目录复制到安装目录。
-
-监听地址为 `0.0.0.0` 时，安装完成输出的访问地址显示为 `127.0.0.1`；监听端口为 `80` 时，访问地址不显示端口。
-
 查看状态：
 
 ```bash
@@ -124,18 +122,10 @@ systemctl status relay-chat.service
 journalctl -u relay-chat.service -f
 ```
 
-修改后端代码后重新部署当前服务：
-
-```bash
-sudo systemctl restart relay-chat.service
-```
-
-只修改 `static/` 下的前端静态文件时，刷新浏览器即可生效。
-
-卸载 systemd 服务：
+## 卸载
 
 ```bash
 sudo python3 ~/.local/share/relay-chat/uninstall.py
 ```
 
-卸载脚本会在安装时复制到安装目录。卸载时执行安装目录里的 `uninstall.py`，它会从安装目录 `.env` 读取服务名，固定删除 systemd unit，并询问是否删除用户数据。选择删除会移除整个安装目录；选择保留会只删除安装目录下的 `server/` 和 `static/`。
+卸载时执行安装目录里的 `uninstall.py`，它会从安装目录 `.env` 文件内读取服务名，删除 systemd unit；询问是否删除数据；是则移除整个安装目录；否只删除安装目录下的 `server/` 和 `static/`。

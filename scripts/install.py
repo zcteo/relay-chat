@@ -7,6 +7,8 @@ import string
 import subprocess
 from pathlib import Path
 
+from uninstall import ask, ask_yes_no, cleanup_install, read_env, require_root, run
+
 
 SERVICE_DEFAULT = "relay-chat"
 HOST_DEFAULT = "0.0.0.0"
@@ -14,20 +16,6 @@ PORT_DEFAULT = "8000"
 PYTHON_BIN = "/usr/bin/python3"
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 UNIT_DIR = Path("/etc/systemd/system")
-
-
-def require_root() -> None:
-    if os.geteuid() != 0:
-        raise SystemExit("请用 root 运行，例如：sudo python3 scripts/install.py")
-
-
-def run(cmd: list[str], *, user: str | None = None) -> None:
-    if user:
-        if shutil.which("sudo"):
-            cmd = ["sudo", "-H", "-u", user, *cmd]
-        else:
-            cmd = ["runuser", "-u", user, "--", *cmd]
-    subprocess.run(cmd, check=True)
 
 
 def create_venv(path: Path) -> None:
@@ -39,38 +27,12 @@ def create_venv(path: Path) -> None:
         ) from exc
 
 
-def ask(prompt: str, default: str) -> str:
-    value = input(f"{prompt} [{default}]: ").strip()
-    return value or default
-
-
-def ask_yes_no(prompt: str, default: bool = True) -> bool:
-    suffix = "Y/n" if default else "y/N"
-    value = input(f"{prompt} [{suffix}]: ").strip().lower()
-    if not value:
-        return default
-    return value in {"y", "yes", "是"}
-
-
 def real_user() -> str:
     return os.environ.get("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name
 
 
 def user_home(username: str) -> Path:
     return Path(pwd.getpwnam(username).pw_dir)
-
-
-def read_env(path: Path) -> dict[str, str]:
-    data: dict[str, str] = {}
-    if not path.exists():
-        return data
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        data[key.strip()] = value.strip().strip("\"'")
-    return data
 
 
 def write_env(path: Path, values: dict[str, str]) -> None:
@@ -105,6 +67,63 @@ def copy_tree(src: Path, dst: Path) -> None:
     if dst.exists():
         shutil.rmtree(dst)
     shutil.copytree(src, dst)
+
+
+def copy_dir_contents(src: Path, dst: Path) -> None:
+    if not src.exists():
+        return
+    dst.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(src, dst, dirs_exist_ok=True)
+
+
+def migrate_data(old_dir: Path, new_dir: Path, old_env: dict[str, str]) -> None:
+    if old_dir == new_dir:
+        return
+    if old_dir in new_dir.parents:
+        raise SystemExit("新安装目录不能位于旧安装目录下")
+    old_data = Path(old_env.get("DATA_DIR", old_dir / "data")).expanduser()
+    old_log = Path(old_env.get("LOG_PATH", old_dir / "log" / "relay-chat.log")).expanduser().parent
+    print(f"==> 迁移数据目录：{old_data} -> {new_dir / 'data'}")
+    copy_dir_contents(old_data, new_dir / "data")
+    print(f"==> 迁移日志目录：{old_log} -> {new_dir / 'log'}")
+    copy_dir_contents(old_log, new_dir / "log")
+
+
+def prepare_existing_install(
+    old_dir: Path | None,
+    old_env: dict[str, str],
+    new_dir: Path,
+    new_service: str,
+) -> None:
+    if not old_dir or not old_env:
+        return
+    old_service = old_env.get("SERVICE_NAME", SERVICE_DEFAULT)
+    service_changed = old_service != new_service
+    path_changed = old_dir != new_dir
+    if not service_changed and not path_changed:
+        return
+
+    if service_changed and not ask_yes_no(
+        f"检测到服务名变化：{old_service} -> {new_service}，是否允许安装脚本自动停止并删除旧服务",
+        True,
+    ):
+        raise SystemExit("已取消安装")
+
+    migrate_old_data = False
+    if path_changed:
+        migrate_old_data = ask_yes_no(
+            f"检测到安装路径变化：{old_dir} -> {new_dir}，是否迁移旧数据",
+            True,
+        )
+
+    if path_changed and migrate_old_data:
+        new_dir.mkdir(parents=True, exist_ok=True)
+        migrate_data(old_dir, new_dir, old_env)
+        cleanup_install(old_dir, old_service, remove_data=True)
+    elif path_changed:
+        cleanup_install(old_dir, old_service, remove_data=True)
+    else:
+        cleanup_install(old_dir, old_service, remove_data=False)
 
 
 def display_url(host: str, port: str) -> str:
@@ -157,7 +176,7 @@ WantedBy=multi-user.target
 
 
 def main() -> None:
-    require_root()
+    require_root("sudo python3 scripts/install.py")
     if not (PROJECT_DIR / "server/main.py").exists():
         raise SystemExit("源码目录缺少 server/main.py")
 
@@ -168,14 +187,23 @@ def main() -> None:
     except KeyError as exc:
         raise SystemExit(f"运行用户不存在：{run_user}") from exc
 
-    default_install = home_dir / ".local/share/relay-chat"
+    default_install = (home_dir / ".local/share/relay-chat").resolve()
     default_env = read_env(default_install / ".env")
     service_name = ask("服务名", default_env.get("SERVICE_NAME", SERVICE_DEFAULT))
     install_dir = validate_install_dir(Path(ask("安装目录", str(default_install))))
     env_path = install_dir / ".env"
-    old_env = read_env(env_path)
-    if old_env.get("SERVICE_NAME") and old_env["SERVICE_NAME"] != service_name:
-        service_name = ask("服务名", old_env.get("SERVICE_NAME", service_name))
+    target_env = read_env(env_path)
+    if target_env:
+        existing_install_dir = install_dir
+        old_env = target_env
+    elif default_env:
+        existing_install_dir = default_install
+        old_env = default_env
+    else:
+        existing_install_dir = None
+        old_env = {}
+
+    prepare_existing_install(existing_install_dir, old_env, install_dir, service_name)
 
     host = ask("监听地址", old_env.get("HOST", HOST_DEFAULT))
     port = ask("监听端口", old_env.get("PORT", PORT_DEFAULT))

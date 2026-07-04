@@ -47,6 +47,17 @@ relay-chat/
     └── uninstall.sh       # systemd 卸载脚本
 ```
 
+## 新会话接手顺序
+
+没有历史上下文时，按这个顺序看项目：
+
+1. 先读 `README.md`，了解功能、启动方式和当前公开使用约定。
+2. 再读本文档，本文档是当前实现和开发约束的主文档。
+3. 需要理解账号同步设计背景时，再读 `docs/SERVER_STORAGE_PLAN.md`。该文件是设计记录，当前实现以代码和本文档为准。
+4. 最后看 `docs/TODO.md`，确认哪些内容只是计划，不能当成已实现功能。
+
+改动前先用 `git status --short` 看工作区，避免覆盖用户或上一轮会话留下的改动。
+
 ## 运行方式
 
 开发启动：
@@ -140,6 +151,16 @@ FastAPI 路由：
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = PROJECT_DIR / "static"
 ```
+
+### 配置约定
+
+`server/config.py` 只负责读取环境变量和安装目录下 `.env` 提供的配置，不存放需要人工修改的部署配置。
+
+后续修改监听地址、端口、数据库路径、日志路径、访问码、注册码等部署配置时，只改 `.env` 或 systemd `EnvironmentFile`，不要修改 Python 源码。
+
+当前 `config.py` 会读取项目根目录或安装目录下的 `.env`，并保留开发环境默认值；真实环境变量优先级高于 `.env`。
+
+当前 `scripts/install.sh` 仍是旧版参数式安装：直接在源码目录创建 `.venv`，systemd `WorkingDirectory` 也指向源码目录。交互式安装、默认安装到 `~/.local/share/relay-chat`、生成 `.env`、压缩混淆 JS 仍在 `docs/TODO.md`，尚未实现。
 
 ### 协议枚举
 
@@ -527,11 +548,10 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 
 ## 安全现状
 
-当前已有应用内注册、登录和账号同步，但还没有 URL 白名单、注册限流、登录限流、邀请码或关闭开放注册配置。
+当前已有应用内注册、登录和账号同步，但还没有注册限流、登录限流、邀请码或关闭开放注册配置。
 
 公网裸露风险主要包括：
 
-- SSRF：别人可让服务器请求任意 baseUrl
 - 资源滥用：长连接、并发、带宽
 - 被当代理跳板
 - 暴力登录和批量注册
@@ -539,7 +559,6 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 
 相关增强已经写在 `docs/TODO.md`：
 
-- 配置文件 URL 白名单
 - 注册/登录限流
 - 邀请码或关闭开放注册
 
@@ -556,7 +575,8 @@ AI 正文和 thinking 都需要 Markdown 渲染。
 9. 停止按钮只能鼠标点击触发，不能由 Enter 触发。
 10. 修改目录结构时，同步 `scripts/install.sh` 的 `uvicorn server.main:app`。
 11. 修改功能或数据结构时，不考虑旧数据同步、旧数据迁移、旧 localStorage 兼容；按新逻辑直接覆盖。
-12. 提交代码前需要先按项目约定格式化代码；JS 使用 Prettier 无分号风格，CSS 保持 Prettier 多行格式。
+12. 不要把部署配置写死到 Python 文件里；`server/config.py` 只做环境变量读取和默认值处理。
+13. 提交代码前需要先按项目约定格式化代码；JS 使用 Prettier 无分号风格，CSS 保持 Prettier 多行格式。
 
 ## 快速验证清单
 

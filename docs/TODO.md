@@ -2,17 +2,37 @@
 
 ## 安全与部署
 
-- [ ] 增加访问认证
-  - 可选方案：Nginx Basic Auth、应用内登录、Cloudflare Access、VPN/Tailscale。
-  - 目的：避免公网匿名访问网页和 `/api/*` 代理接口。
+- [ ] 访问认证增强
+  - 未登录访问主页先弹访问码，访问码正确后，把访问码保存到 localStorage
+  - 未登录每次打开页面先验证访问码，访问码正确后才进入本地使用界面；不正确就清除 localStorage 并显示访问码界面
+  - 未登录调用 `/api/chat`、`/api/models` 时带 `X-Access-Code`，后端每次校验访问码。
+  - 已登录调用 `/api/chat`、`/api/models` 时带 `Authorization: Bearer <token>`，不需要访问码。
+  - 开放注册，但注册必须输入注册码；注册码配置在服务端环境变量，第一次 install 时生成并写入 `.env`。
+  - `scripts/install.sh` 首次安装时生成访问码和注册码，并在终端输出一次，提醒用户保存。
+  - 访问码认证接口失败限流，防止恶意批量尝试访问码。
+  - 增加登录/注册限流，按 IP 和用户名限制失败频率。
 
-- [ ] 增加配置文件 URL 白名单
-  - 例如通过 `.env` 或 `config.yaml` 配置允许访问的 API Base URL：
-    - `https://stepcode.cnzxo.com`
-    - `https://api.openai.com`
-    - `https://api.anthropic.com`
-  - 后端只允许代理白名单内的 URL。
-  - 目的：降低 SSRF、代理滥用、内网探测风险。
+- [ ] 前端资源发布优化
+  - 生产安装时压缩并混淆 JS 文件，降低直接阅读前端逻辑和复制滥用成本。
+  - 保留源码文件用于开发，生成的压缩文件只用于部署引用。
+
+- [ ] 安装部署脚本改造
+  - `scripts/install.sh` 不再使用命令行参数，改成交互式安装。
+  - 每个安装选项都显示默认值，用户可编辑；直接回车使用默认值。
+  - 默认安装目录为 `~/.local/share/relay-chat`，运行目录和数据目录不得放在源码目录下。
+  - 默认安装目录结构：
+    - `server/`：从源码 `server/` 原封不动拷贝。
+    - `static/`：HTML、CSS、图片等静态文件拷贝；JS 使用压缩混淆后的文件。
+    - `data/`：存放 SQLite 数据库。
+    - `log/`：存放应用日志。
+    - `.env`：存放监听地址、端口、访问码、注册码、数据库路径、日志路径等配置。
+  - `server/config.py` 只负责读取环境变量和 `.env`，不存放需要人工修改的部署配置。
+  - 后续修改运行配置只改安装目录下 `.env`，不修改 Python 源码。
+  - systemd 仍使用系统级 unit，写入 `/etc/systemd/system/relay-chat.service`。
+  - systemd 服务运行用户为当前真实用户；使用 sudo 执行时取 `$SUDO_USER`，避免数据库和日志写成 root。
+  - unit 的 `WorkingDirectory` 指向安装目录，`EnvironmentFile` 指向安装目录下 `.env`。
+  - 首次安装时生成访问码和注册码，写入 `.env`，并在终端输出一次提醒用户保存。
+  - 重新安装时保留已有 `.env`、`data/` 和 `log/`，只更新 `server/` 和部署版 `static/`。
 
 - [x] 支持数据保存在后端
   - 未登录时设置、Token、模型列表、会话历史保存在浏览器 localStorage。
@@ -27,7 +47,7 @@
   - 需要避免影响主聊天流式体验，可异步执行。
 
 - [ ] 会话列表重命名改为直接编辑
-  - 当前使用浏览器 `prompt` 弹窗。
+  - 当前使用站内自定义弹窗，不使用浏览器原生 `prompt`。
   - 后续改成类似 ChatGPT：点击“重命名”后，左侧会话标题直接变成输入框。
   - Enter 保存，Esc 取消，失焦默认保存。
 

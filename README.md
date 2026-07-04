@@ -56,7 +56,7 @@ http://服务器IP:8000
 - 转发请求默认带：`X-Origin-Agent: stepcode`。
 - Anthropic 鉴权也使用：`Authorization: Bearer <token>`。
 - 未登录时 API Token 保存在浏览器 `localStorage`；登录后 API Token 会保存到服务器数据库。
-- 生产公网部署建议配合 HTTPS，并考虑注册/登录限流、邀请码或关闭开放注册、API URL 白名单。
+- 生产公网部署建议配合 HTTPS，并考虑注册/登录限流、邀请码或关闭开放注册。
 - 安全增强计划见 `docs/TODO.md`。
 
 ## systemd 安装

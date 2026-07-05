@@ -36,6 +36,7 @@ relay-chat/
 │   ├── auth.js
 │   ├── favicon.ico
 │   ├── markdown.js
+│   ├── storage-browser.js
 │   ├── storage-local.js
 │   ├── storage-server.js
 │   └── style.css
@@ -220,8 +221,9 @@ data: {"type":"done"}\n\n
 
 模块划分：
 
-- `static/auth.js`：登录 token 和访问码的 localStorage 读写。
-- `static/storage-local.js`：未登录本地存储适配器。
+- `static/auth.js`：服务器登录 token 的 localStorage 读写。
+- `static/storage-browser.js`：浏览器级设置存储，登录和未登录共用。
+- `static/storage-local.js`：本地模式 API 配置、会话和消息存储适配器。
 - `static/storage-server.js`：登录后服务器 API 适配器。
 - `static/markdown.js`：Markdown 渲染器。
 - `static/style.css`：所有样式和主题变量。
@@ -233,34 +235,45 @@ data: {"type":"done"}\n\n
 当前 key：
 
 ```js
-const LOCAL_STATE_KEY = "relaychat-state-v1";
+const BROWSER_SETTINGS_KEY = "relaychat-browser-settings-v1";
+const LOCAL_STATE_KEY = "relaychat-local-state-v1";
 const SERVER_AUTH_KEY = "relaychat-server-auth-v1";
-const ACCESS_CODE_KEY = "relaychat-access-code-v1";
 ```
 
-本地状态包含：
+浏览器级设置保存在 `relaychat-browser-settings-v1`，登录和未登录共用，不参与账号同步：
+
+```js
+{
+  theme: "auto",
+  thinking: true,
+  temperature: "",
+  maxTokens: "",
+  systemPrompt: "",
+  historyCount: "6",
+  accessCode: ""
+}
+```
+
+`historyCount` 默认值为 6，留空或 0 表示附带全部历史。`accessCode` 是访问码，只保存在当前浏览器。
+
+本地模式状态保存在 `relaychat-local-state-v1`：
 
 ```js
 {
   settings: {
-    theme,
-    protocol,
-    baseUrl,
-    token,
-    apiCredentials,
-    model,
-    models,
-    thinking,
-    temperature,
-    maxTokens,
-    systemPrompt
+    protocol: "openai_responses",
+    baseUrl: "",
+    token: "",
+    apiCredentials: {},
+    model: "",
+    models: []
   },
-  sessions,
-  currentId
+  sessions: [],
+  currentId: null
 }
 ```
 
-未登录时，设置和历史只存在浏览器本地。登录后，通过 `storage-server.js` 读写服务器账号数据。
+未登录时，API 配置、模型列表和历史只存在 `relaychat-local-state-v1`。登录后，通过 `storage-server.js` 读写服务器账号数据，浏览器级设置仍然只保存在 `relaychat-browser-settings-v1`。
 
 ### API URL 和 Token
 
@@ -443,6 +456,7 @@ python3 -m py_compile scripts/install.py scripts/uninstall.py
 ```bash
 node --check static/markdown.js
 node --check static/auth.js
+node --check static/storage-browser.js
 node --check static/storage-local.js
 node --check static/storage-server.js
 node --check static/app.js
@@ -460,7 +474,7 @@ npx prettier --check README.md docs/API.md docs/HANDOFF.md docs/TODO.md
 - 未配置 `ACCESS_CODE` 时，未登录可直接进入本地界面。
 - 配置 `ACCESS_CODE` 时，未登录首次打开出现访问码弹窗。
 - 访问码错误返回 `401`，连续错误触发 `429`。
-- 访问码正确后进入本地界面，并保存到 `relaychat-access-code-v1`。
+- 访问码正确后进入本地界面，并保存到 `relaychat-browser-settings-v1`。
 - 未登录获取模型和聊天请求带 `X-Access-Code`。
 - 设置里未登录显示“登录”，登录后显示用户名和“注销”。
 - 配置 `REGISTRATION_CODE` 后，注册需要注册码和两次相同密码。

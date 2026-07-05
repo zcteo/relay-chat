@@ -1,28 +1,34 @@
 const $ = (id) => document.getElementById(id)
 const TITLE_GENERATION_TIMEOUT_MS = 30000
 
+const defaultBrowserSettings = {
+  theme: "auto",
+  thinking: true,
+  temperature: "",
+  maxTokens: "",
+  systemPrompt: "",
+  historyCount: "6",
+  accessCode: "",
+}
+const defaultModeSettings = {
+  protocol: "openai_responses",
+  baseUrl: "",
+  token: "",
+  apiCredentials: {},
+  model: "",
+  models: [],
+}
 const defaultState = {
   settings: {
-    theme: "auto",
-    protocol: "openai_responses",
-    baseUrl: "",
-    token: "",
-    apiCredentials: {},
-    model: "",
-    models: [],
-    thinking: true,
-    temperature: "",
-    maxTokens: "",
-    systemPrompt: "",
+    ...defaultBrowserSettings,
+    ...defaultModeSettings,
   },
   sessions: [],
   currentId: null,
 }
 let serverAuth = RelayAuth.loadServerAuth()
 let serverReady = !serverAuth?.token
-let state = serverAuth?.token
-  ? structuredClone(defaultState)
-  : RelayLocalStorage.load(defaultState)
+let state = serverAuth?.token ? structuredClone(defaultState) : loadLocal()
 let sending = false
 let currentAbort = null
 let titleAbort = null
@@ -33,6 +39,24 @@ let userScrollIntent = false
 let userScrollIntentTimer = null
 let popoverPointerStartedInside = false
 
+function pick(source, keys) {
+  const out = {}
+  for (const key of keys) out[key] = source[key]
+  return out
+}
+function browserSettings() {
+  return pick(state.settings, Object.keys(defaultBrowserSettings))
+}
+function modeSettings() {
+  return pick(state.settings, Object.keys(defaultModeSettings))
+}
+function mergedSettings(modeSettingsValue = {}) {
+  return {
+    ...RelayBrowserSettings.load(defaultBrowserSettings),
+    ...structuredClone(defaultModeSettings),
+    ...(modeSettingsValue || {}),
+  }
+}
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
@@ -102,30 +126,55 @@ function saveServerAuth(auth) {
   serverAuth = auth
   RelayAuth.saveServerAuth(auth)
 }
-function accessCode() {
-  return RelayAuth.loadAccessCode()
+function savedAccessCode() {
+  return state.settings.accessCode || ""
 }
-function saveAccessCode(code) {
-  RelayAuth.saveAccessCode(code)
+function setSavedAccessCode(code) {
+  state.settings.accessCode = String(code || "").trim()
+  saveBrowser()
 }
-function clearAccessCode() {
-  RelayAuth.clearAccessCode()
+function clearSavedAccessCode() {
+  state.settings.accessCode = ""
+  saveBrowser()
 }
 function proxyHeaders() {
   const headers = { "Content-Type": "application/json" }
   if (isServerMode() && serverAuth?.token)
     headers.Authorization = `Bearer ${serverAuth.token}`
   else {
-    const code = accessCode()
+    const code = savedAccessCode()
     if (code) headers["X-Access-Code"] = code
   }
   return headers
 }
 function loadLocal() {
-  return RelayLocalStorage.load(defaultState)
+  const localState = RelayLocalStorage.load({
+    settings: structuredClone(defaultModeSettings),
+    sessions: [],
+    currentId: null,
+  })
+  return {
+    ...structuredClone(defaultState),
+    ...localState,
+    settings: mergedSettings(localState.settings),
+  }
 }
-function save() {
-  if (!isServerMode()) RelayLocalStorage.save(state)
+function saveBrowser() {
+  RelayBrowserSettings.save(browserSettings())
+}
+function saveLocal() {
+  RelayLocalStorage.save({
+    settings: modeSettings(),
+    sessions: state.sessions,
+    currentId: state.currentId,
+  })
+}
+function saveMode() {
+  if (!isServerMode()) saveLocal()
+}
+function saveState() {
+  saveBrowser()
+  if (!isServerMode()) saveLocal()
 }
 function current() {
   return state.sessions.find((s) => s.id === state.currentId)
@@ -205,14 +254,14 @@ async function verifyAccessCode(code) {
 }
 async function requireLocalAccess() {
   if (isServerMode()) return true
-  const savedCode = accessCode()
+  const savedCode = savedAccessCode()
   if (savedCode) {
     try {
       await verifyAccessCode(savedCode)
       return true
     } catch (e) {
       if (e.status === 429) await showAlert("尝试过于频繁，请稍后再试")
-      clearAccessCode()
+      clearSavedAccessCode()
     }
   }
   try {
@@ -234,7 +283,7 @@ async function requireLocalAccess() {
     if (!code || !String(code).trim()) continue
     try {
       await verifyAccessCode(code)
-      saveAccessCode(code)
+      setSavedAccessCode(code)
       return true
     } catch (e) {
       await showAlert(
@@ -251,16 +300,12 @@ async function handleProxyUnauthorized() {
     handleTokenExpired()
     throw new Error("登录已过期，请重新登录")
   }
-  clearAccessCode()
+  clearSavedAccessCode()
   await requireLocalAccess()
   throw new Error("访问认证已失效，请重新发送请求")
 }
 function applyServerSettings(settings) {
-  state.settings = {
-    ...structuredClone(defaultState.settings),
-    theme: state.settings.theme || defaultState.settings.theme,
-    ...(settings || {}),
-  }
+  state.settings = mergedSettings(settings)
   state.settings.apiCredentials = normalizeApiCredentials(
     state.settings.apiCredentials,
   )
@@ -368,7 +413,7 @@ async function selectSession(id) {
       }
     }
   } else {
-    save()
+    saveState()
   }
   render()
 }
@@ -445,7 +490,7 @@ function newSession() {
   const existing = state.sessions.find(isBlankSession)
   if (existing) {
     state.currentId = existing.id
-    save()
+    saveState()
     render()
     return
   }
@@ -459,7 +504,7 @@ function newSession() {
   }
   state.sessions.unshift(s)
   state.currentId = s.id
-  save()
+  saveState()
   render()
 }
 
@@ -473,6 +518,7 @@ function syncSettingsToUI() {
   $("thinking").checked = !!s.thinking
   $("temperature").value = s.temperature ?? ""
   $("maxTokens").value = s.maxTokens ?? ""
+  $("historyCount").value = s.historyCount ?? "6"
   $("systemPrompt").value = s.systemPrompt || ""
   renderSavedBaseUrls()
   renderModels()
@@ -497,30 +543,50 @@ function apiSettingsFromUI() {
     token: $("token").value.trim(),
   }
 }
-function syncSettingsFromUI({ includeApi = false } = {}) {
+function browserSettingsFromUI() {
+  return {
+    theme: $("theme").value,
+    thinking: $("thinking").checked,
+    temperature: $("temperature").value,
+    maxTokens: $("maxTokens").value,
+    historyCount: $("historyCount").value,
+    systemPrompt: $("systemPrompt").value,
+  }
+}
+function modeSettingsFromUI({ includeApi = false } = {}) {
   const model =
     $("settingsModel").value.trim() ||
     $("model").value.trim() ||
     state.settings.model
   const next = {
-    theme: $("theme").value,
     protocol: $("protocol").value,
     model,
-    thinking: $("thinking").checked,
-    temperature: $("temperature").value,
-    maxTokens: $("maxTokens").value,
-    systemPrompt: $("systemPrompt").value,
   }
   if (includeApi) {
     const api = apiSettingsFromUI()
     Object.assign(next, api)
     rememberCredential(api.baseUrl, api.token)
   }
+  return next
+}
+function syncBrowserSettingsFromUI() {
+  Object.assign(state.settings, browserSettingsFromUI())
+  saveBrowser()
+  applyTheme()
+}
+function syncModeSettingsFromUI({
+  includeApi = false,
+  saveServer = false,
+} = {}) {
+  const next = modeSettingsFromUI({ includeApi })
   Object.assign(state.settings, next)
   rememberModel(state.settings.model)
-  save()
-  applyTheme()
-  if (isServerMode() && serverReady) saveServerSettings()
+  saveMode()
+  if (saveServer) saveServerSettings()
+}
+function syncSettingsFromUI(options = {}) {
+  syncBrowserSettingsFromUI()
+  syncModeSettingsFromUI(options)
 }
 function renderSavedBaseUrls() {
   const menu = $("savedBaseUrlMenu")
@@ -651,7 +717,7 @@ async function renameSession(id) {
   s.title = next
   s.titleSource = "user"
   s.updatedAt = Date.now()
-  save()
+  saveState()
   await updateServerSession(s)
   renderSessions()
 }
@@ -669,7 +735,7 @@ async function deleteSession(id) {
   state.sessions = state.sessions.filter((x) => x.id !== id)
   if (state.currentId === id)
     state.currentId = isServerMode() ? null : state.sessions[0]?.id || null
-  save()
+  saveState()
   render()
 }
 function renderSessions() {
@@ -978,7 +1044,7 @@ async function loadModels() {
       state.settings.model = state.settings.models[0].id
       applyProtocolForModel(state.settings.model)
     }
-    save()
+    saveMode()
     await saveServerSettings()
     renderModels()
     renderModelLabel()
@@ -995,9 +1061,41 @@ function requestMessages(session) {
   const msgs = []
   if (state.settings.systemPrompt.trim())
     msgs.push({ role: "system", content: state.settings.systemPrompt.trim() })
-  for (const m of session.messages)
+  for (const m of selectedHistoryMessages(session))
     msgs.push({ role: m.role, content: m.content || "" })
   return msgs
+}
+function isStoppedMessage(message) {
+  return String(message?.content || "").includes("已停止生成")
+}
+function selectedHistoryMessages(session) {
+  const messages = session.messages || []
+  const raw = String(state.settings.historyCount ?? "").trim()
+  const limit = Math.max(0, Number(raw) || 0)
+  if (limit === 0) return messages
+  const tail = []
+  let completePairs = 0
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const assistant = messages[i]
+    const user = messages[i - 1]
+    if (
+      assistant?.role === "assistant" &&
+      assistant.content &&
+      !isStoppedMessage(assistant) &&
+      user?.role === "user"
+    ) {
+      if (completePairs < limit) {
+        tail.unshift(user, assistant)
+        completePairs += 1
+      }
+      i -= 1
+      continue
+    }
+    if (i === messages.length - 1 && assistant?.role === "user") {
+      tail.unshift(assistant)
+    }
+  }
+  return tail
 }
 function apiSettings(settings = state.settings) {
   return {
@@ -1101,7 +1199,7 @@ async function generateSessionTitle(sessionId) {
     latest.title = title
     latest.titleSource = "model"
     latest.updatedAt = Date.now()
-    save()
+    saveState()
     await updateServerSession(latest)
     renderSessions()
   } catch (e) {
@@ -1165,7 +1263,7 @@ async function sendMessage(text) {
   const assistant = { role: "assistant", content: "", thinking: "" }
   s.messages.push(assistant)
   s.updatedAt = Date.now()
-  save()
+  saveState()
   await updateServerSession(s)
   await saveServerMessage(s, userMessage)
   render()
@@ -1243,7 +1341,7 @@ async function sendMessage(text) {
     generationStopped = false
     setSendingUI(false)
     s.updatedAt = Date.now()
-    save()
+    saveState()
     if (assistant.content || assistant.thinking)
       await saveServerMessage(s, assistant)
     renderSessions()
@@ -1281,11 +1379,11 @@ $("deleteAllChats").onclick = async () => {
   state.sessions = []
   state.currentId = null
   closeMenu()
-  save()
+  saveState()
   render()
 }
 $("saveSettings").onclick = () => {
-  syncSettingsFromUI({ includeApi: true })
+  syncSettingsFromUI({ includeApi: true, saveServer: true })
   showToast(isServerMode() ? "设置已保存到服务器" : "设置已保存到浏览器本地")
 }
 $("loadModels").onclick = loadModels
@@ -1309,7 +1407,7 @@ $("deleteSavedBaseUrl").onclick = async () => {
     state.settings.baseUrl = ""
     state.settings.token = ""
   }
-  save()
+  saveMode()
   await saveServerSettings()
   renderSavedBaseUrls()
   closeSavedBaseUrlMenu()
@@ -1327,7 +1425,7 @@ function setModel(value, infer = true) {
   if (infer) applyProtocolForModel(state.settings.model)
   $("model").value = state.settings.model
   $("settingsModel").value = state.settings.model
-  save()
+  saveMode()
   saveServerSettings({
     model: state.settings.model,
     protocol: state.settings.protocol,
@@ -1365,7 +1463,7 @@ $("settingsModelOptionsMenu").onclick = (e) => e.stopPropagation()
 $("settingsProtocol").onchange = () => {
   state.settings.protocol = $("settingsProtocol").value
   $("protocol").value = state.settings.protocol
-  save()
+  saveMode()
   saveServerSettings({ protocol: state.settings.protocol })
   renderModelLabel()
 }
@@ -1519,7 +1617,7 @@ document.addEventListener("click", (e) => {
 $("protocol").addEventListener("change", () => {
   state.settings.protocol = $("protocol").value
   $("settingsProtocol").value = state.settings.protocol
-  save()
+  saveMode()
   saveServerSettings({ protocol: state.settings.protocol })
   renderModelLabel()
 })
@@ -1531,9 +1629,13 @@ for (const id of [
   "systemPrompt",
 ])
   $(id).addEventListener("change", () => {
-    syncSettingsFromUI()
+    syncBrowserSettingsFromUI()
     renderModelLabel()
   })
+$("historyCount").addEventListener("change", () => {
+  state.settings.historyCount = $("historyCount").value
+  saveBrowser()
+})
 const colorSchemeQuery = window.matchMedia("(prefers-color-scheme: dark)")
 if (colorSchemeQuery.addEventListener)
   colorSchemeQuery.addEventListener("change", applyTheme)

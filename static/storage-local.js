@@ -1,14 +1,14 @@
 const RelayLocalStorage = (() => {
-  const LOCAL_STATE_KEY = "relaychat-state-v1"
+  const LOCAL_STATE_KEY = "relaychat-local-state-v1"
 
-  function load(defaultState) {
+  function load(defaultModeState) {
     try {
       const loaded = {
-        ...structuredClone(defaultState),
+        ...structuredClone(defaultModeState),
         ...(JSON.parse(localStorage.getItem(LOCAL_STATE_KEY)) || {}),
       }
       loaded.settings = {
-        ...structuredClone(defaultState.settings),
+        ...structuredClone(defaultModeState.settings),
         ...(loaded.settings || {}),
       }
       loaded.settings.apiCredentials = {
@@ -16,7 +16,7 @@ const RelayLocalStorage = (() => {
       }
       return loaded
     } catch {
-      return structuredClone(defaultState)
+      return structuredClone(defaultModeState)
     }
   }
 

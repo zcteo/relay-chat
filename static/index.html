@@ -248,6 +248,16 @@
                 />
               </label>
               <label
+                >附带历史消息数
+                <input
+                  id="historyCount"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="默认 6；留空或 0 为全部"
+                />
+              </label>
+              <label
                 >系统提示词
                 <textarea
                   id="systemPrompt"
@@ -386,6 +396,7 @@
     <div id="toast" class="toast hidden"></div>
     <script src="/static/markdown.js"></script>
     <script src="/static/auth.js"></script>
+    <script src="/static/storage-browser.js"></script>
     <script src="/static/storage-local.js"></script>
     <script src="/static/storage-server.js"></script>
     <script src="/static/app.js"></script>

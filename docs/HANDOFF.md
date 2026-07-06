@@ -156,6 +156,8 @@ FastAPI 入口是 `server/main.py`。启动时调用 `init_db()` 初始化 SQLit
 - 用户表和用户设置合并在 `users` 表。
 - 用户、登录 token、会话、消息 ID 都是 SQLite 自增整数。
 - 同一用户支持多端登录；每个设备一条 `login_tokens` 记录。
+- `users` 表中 ID 最小的第一个注册账号具备重置其他账号密码的能力，`GET /api/profile` 通过 `user.resetPasswd` 返回给前端；不新增管理员字段。
+- `PUT /api/password` 是唯一密码修改接口；不传 `username` 时修改当前账号密码并校验当前密码，传 `username` 时由具备 `resetPasswd` 能力的账号重置目标账号密码。
 - 前端保存登录 token 明文；服务器只保存 `token_hash`。
 - token 使用滑动有效期；成功使用 token 会刷新过期时间。
 - `GET /api/profile` 会清理过期或已注销 token。

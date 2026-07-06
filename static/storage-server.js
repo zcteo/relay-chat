@@ -176,6 +176,14 @@ const RelayServerStorage = (() => {
     return data.message
   }
 
+  async function changePassword(auth, onExpired, payload) {
+    const resp = await request(auth, onExpired, "/api/password", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    })
+    return readJsonResponse(resp)
+  }
+
   async function logout(auth) {
     const resp = await fetch("/api/logout", {
       method: "POST",
@@ -198,6 +206,7 @@ const RelayServerStorage = (() => {
     updateSession,
     deleteSession,
     createMessage,
+    changePassword,
     logout,
   }
 })()

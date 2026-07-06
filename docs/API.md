@@ -149,7 +149,8 @@ curl -X POST http://127.0.0.1:8000/api/register \
 {
   "user": {
     "id": 1,
-    "username": "alice"
+    "username": "alice",
+    "resetPasswd": true
   },
   "ok": true
 }
@@ -192,7 +193,8 @@ curl -X POST http://127.0.0.1:8000/api/login \
 {
   "user": {
     "id": 1,
-    "username": "alice"
+    "username": "alice",
+    "resetPasswd": true
   },
   "token": "login-token",
   "shouldOfferLocalUpload": true
@@ -200,6 +202,8 @@ curl -X POST http://127.0.0.1:8000/api/login \
 ```
 
 `shouldOfferLocalUpload` 为 `true` 时，前端如果发现当前浏览器有本地数据，会询问是否上传到服务器账号。
+
+`resetPasswd` 表示当前账号是否可以重置其他账号密码；系统中第一个注册账号具备该能力。
 
 ### POST /api/logout
 
@@ -225,6 +229,53 @@ curl -X POST http://127.0.0.1:8000/api/logout \
   "ok": true
 }
 ```
+
+### PUT /api/password
+
+修改密码。当前账号修改自己的密码时必须传当前密码；具备 `resetPasswd` 能力的账号可以传 `username` 重置指定用户密码。
+
+请求头：
+
+```http
+Authorization: Bearer <token>
+```
+
+修改自己的密码：
+
+```json
+{
+  "currentPassword": "old-password",
+  "newPassword": "new-password"
+}
+```
+
+重置指定用户密码：
+
+```json
+{
+  "username": "bob",
+  "newPassword": "new-password"
+}
+```
+
+示例请求：
+
+```bash
+curl -X PUT http://127.0.0.1:8000/api/password \
+  -H "Authorization: Bearer login-token" \
+  -H "Content-Type: application/json" \
+  -d '{"currentPassword":"old-password","newPassword":"new-password"}'
+```
+
+示例回复：
+
+```json
+{
+  "ok": true
+}
+```
+
+当前账号修改自己的密码成功后会保留当前登录 token，并撤销同账号其他登录 token。重置指定用户密码成功后会撤销该用户全部登录 token。
 
 ### GET /api/profile
 

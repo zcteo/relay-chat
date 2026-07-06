@@ -33,6 +33,14 @@ class Credentials(BaseModel):
     registration_code: str = Field("", alias="registrationCode")
 
 
+class ChangePasswordPayload(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    username: str = ""
+    current_password: str = Field("", max_length=256, alias="currentPassword")
+    new_password: str = Field(..., min_length=1, max_length=256, alias="newPassword")
+
+
 class SettingsPayload(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
@@ -169,6 +177,17 @@ def should_offer(row: Any) -> bool:
     return int(row["first_login_completed"] or 0) == 0
 
 
+def can_reset_passwd(conn: sqlite3.Connection, user_id: int) -> bool:
+    row = conn.execute("SELECT MIN(id) AS reset_user_id FROM users").fetchone()
+    return bool(row and row["reset_user_id"] == user_id)
+
+
+def public_user_with_role(conn: sqlite3.Connection, row: Any) -> dict[str, Any]:
+    user = public_user(row)
+    user["resetPasswd"] = can_reset_passwd(conn, row["id"])
+    return user
+
+
 def require_registration_code(req: Credentials, request: Request) -> None:
     if not REGISTRATION_CODE.strip():
         return
@@ -225,7 +244,9 @@ async def login(req: Credentials, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=401, detail="invalid_credentials")
     clear_failures(key)
     token = create_login_token(row["id"])
-    return {"user": public_user(row), "token": token, "shouldOfferLocalUpload": should_offer(row)}
+    with db() as conn:
+        user = public_user_with_role(conn, row)
+    return {"user": user, "token": token, "shouldOfferLocalUpload": should_offer(row)}
 
 
 @router.post("/logout")
@@ -243,7 +264,51 @@ async def profile(user: CurrentUser) -> dict[str, Any]:
     cleanup_login_tokens()
     with db() as conn:
         row = conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
-    return {"user": public_user(row), "settings": settings_from_user(row)}
+        public = public_user_with_role(conn, row)
+    return {"user": public, "settings": settings_from_user(row)}
+
+
+@router.put("/password")
+async def change_password(req: ChangePasswordPayload, user: CurrentUser) -> dict[str, bool]:
+    now = now_iso()
+    target_username = req.username.strip()
+    with db() as conn:
+        if target_username:
+            if not can_reset_passwd(conn, user["id"]):
+                raise HTTPException(status_code=403, detail="permission_denied")
+            target = conn.execute("SELECT * FROM users WHERE username = ?", (target_username,)).fetchone()
+            if not target:
+                raise HTTPException(status_code=404, detail="user_not_found")
+            conn.execute(
+                "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+                (hash_password(req.new_password), now, target["id"]),
+            )
+            conn.execute(
+                "UPDATE login_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
+                (now, target["id"]),
+            )
+            return {"ok": True}
+
+        if not req.current_password:
+            raise HTTPException(status_code=422, detail="current_password_required")
+        if req.current_password == req.new_password:
+            raise HTTPException(status_code=422, detail="password_unchanged")
+        current = conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
+        if not current or not verify_password(req.current_password, current["password_hash"]):
+            raise HTTPException(status_code=403, detail="invalid_current_password")
+        conn.execute(
+            "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+            (hash_password(req.new_password), now, user["id"]),
+        )
+        conn.execute(
+            """
+            UPDATE login_tokens
+            SET revoked_at = ?
+            WHERE user_id = ? AND token_hash != ? AND revoked_at IS NULL
+            """,
+            (now, user["id"], user["login_token_hash"]),
+        )
+    return {"ok": True}
 
 
 @router.put("/settings")

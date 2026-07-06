@@ -75,6 +75,7 @@ function showModal({
     const modal = $("customModal")
     const inputWrap = $("modalInputWrap")
     const inputEl = $("modalInput")
+    const fieldsEl = $("modalFields")
     const cancel = $("modalCancel")
     const confirm = $("modalConfirm")
 
@@ -85,6 +86,8 @@ function showModal({
     cancel.textContent = cancelText
     cancel.classList.toggle("hidden", !showCancel)
     inputWrap.classList.toggle("hidden", !input)
+    fieldsEl.classList.add("hidden")
+    fieldsEl.replaceChildren()
     inputEl.type = inputType
     inputEl.value = defaultValue || ""
     modal.classList.remove("hidden")
@@ -120,6 +123,67 @@ function showPrompt(message, defaultValue = "", title = "输入") {
     input: true,
     defaultValue,
     showCancel: true,
+  })
+}
+function showFormModal({
+  title = "提示",
+  message = "",
+  fields = [],
+  confirmText = "确定",
+  cancelText = "取消",
+} = {}) {
+  return new Promise((resolve) => {
+    const modal = $("customModal")
+    const inputWrap = $("modalInputWrap")
+    const fieldsEl = $("modalFields")
+    const cancel = $("modalCancel")
+    const confirm = $("modalConfirm")
+    const inputs = {}
+
+    $("modalTitle").textContent = title
+    $("modalMessage").textContent = message
+    confirm.textContent = confirmText
+    cancel.textContent = cancelText
+    cancel.classList.remove("hidden")
+    inputWrap.classList.add("hidden")
+    fieldsEl.classList.remove("hidden")
+    fieldsEl.replaceChildren()
+
+    for (const field of fields) {
+      const label = document.createElement("label")
+      label.textContent = field.label
+      const input = document.createElement("input")
+      input.type = field.type || "text"
+      input.autocomplete = field.autocomplete || "off"
+      input.value = field.defaultValue || ""
+      label.appendChild(input)
+      fieldsEl.appendChild(label)
+      inputs[field.name] = input
+    }
+
+    function cleanup(value) {
+      modal.classList.add("hidden")
+      fieldsEl.classList.add("hidden")
+      fieldsEl.replaceChildren()
+      confirm.onclick = null
+      cancel.onclick = null
+      document.onkeydown = null
+      resolve(value)
+    }
+
+    confirm.onclick = () => {
+      const values = {}
+      for (const [name, input] of Object.entries(inputs))
+        values[name] = input.value
+      cleanup(values)
+    }
+    cancel.onclick = () => cleanup(null)
+    document.onkeydown = (e) => {
+      if (e.key === "Escape") cleanup(null)
+    }
+    const first = Object.values(inputs)[0]
+    if (first) setTimeout(() => first.focus(), 0)
+    modal.classList.remove("hidden")
   })
 }
 function saveServerAuth(auth) {
@@ -206,6 +270,11 @@ function renderAccountStatus() {
     isServerMode() && username ? `已登录：${username}` : "未登录，正在本地使用"
   $("openLogin").classList.toggle("hidden", isServerMode() && !!username)
   $("logoutAccount").classList.toggle("hidden", !(isServerMode() && !!username))
+  $("changePassword").classList.toggle("hidden", !(isServerMode() && !!username))
+  $("resetPassword").classList.toggle(
+    "hidden",
+    !(isServerMode() && serverAuth?.user?.resetPasswd),
+  )
 }
 function renderAuthGate() {
   $("authGate").classList.remove("hidden")
@@ -1486,8 +1555,58 @@ async function openLogin() {
   closeMenu()
   renderAuthGate()
 }
+async function changePassword() {
+  const values = await showFormModal({
+    title: "修改密码",
+    fields: [
+      { name: "currentPassword", label: "当前密码", type: "password" },
+      { name: "newPassword", label: "新密码", type: "password" },
+      { name: "confirmPassword", label: "确认新密码", type: "password" },
+    ],
+    confirmText: "保存",
+  })
+  if (!values) return
+  const currentPassword = values.currentPassword || ""
+  const newPassword = values.newPassword || ""
+  if (!currentPassword || !newPassword || !values.confirmPassword)
+    return showAlert("请输入当前密码和两次新密码")
+  if (newPassword !== values.confirmPassword)
+    return showAlert("两次输入的新密码不一致")
+  await RelayServerStorage.changePassword(serverAuth, handleTokenExpired, {
+    currentPassword,
+    newPassword,
+  })
+  await showAlert("密码已修改")
+}
+async function resetPassword() {
+  const values = await showFormModal({
+    title: "重置用户密码",
+    fields: [
+      { name: "username", label: "用户名", autocomplete: "username" },
+      { name: "newPassword", label: "新密码", type: "password" },
+      { name: "confirmPassword", label: "确认新密码", type: "password" },
+    ],
+    confirmText: "重置",
+  })
+  if (!values) return
+  const username = (values.username || "").trim()
+  const newPassword = values.newPassword || ""
+  if (!username || !newPassword || !values.confirmPassword)
+    return showAlert("请输入用户名和两次新密码")
+  if (newPassword !== values.confirmPassword)
+    return showAlert("两次输入的新密码不一致")
+  await RelayServerStorage.changePassword(serverAuth, handleTokenExpired, {
+    username,
+    newPassword,
+  })
+  await showAlert("密码已重置")
+}
 $("openLogin").onclick = openLogin
 $("logoutAccount").onclick = logoutAccount
+$("changePassword").onclick = () =>
+  changePassword().catch((e) => showAlert("修改密码失败：" + e.message))
+$("resetPassword").onclick = () =>
+  resetPassword().catch((e) => showAlert("重置密码失败：" + e.message))
 $("cancelLogin").onclick = () => {
   requireLocalAccess().then((ok) => {
     if (ok) hideGates()

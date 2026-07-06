@@ -134,6 +134,12 @@
                 <span id="accountStatus">未登录，正在本地使用</span>
                 <div class="mode-actions">
                   <button id="openLogin" type="button">登录</button>
+                  <button id="resetPassword" class="hidden" type="button">
+                    密码重置
+                  </button>
+                  <button id="changePassword" class="hidden" type="button">
+                    修改密码
+                  </button>
                   <button id="logoutAccount" class="hidden" type="button">
                     注销
                   </button>
@@ -387,6 +393,7 @@
           <span id="modalInputLabel">内容</span>
           <input id="modalInput" />
         </label>
+        <div id="modalFields" class="modal-fields hidden"></div>
         <div class="gate-actions">
           <button id="modalCancel" type="button">取消</button>
           <button id="modalConfirm" type="button">确定</button>

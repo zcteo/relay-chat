@@ -881,17 +881,13 @@ CREATE INDEX idx_messages_user_id ON messages(user_id);
 
 后端配置来自环境变量或项目/安装目录下 `.env`。真实环境变量优先级高于 `.env`。
 
-| 配置                            | 默认值                    | 含义                                       |
-| ------------------------------- | ------------------------- | ------------------------------------------ |
-| `DATA_DIR`                      | `data`                    | 数据目录。                                 |
-| `DB_PATH`                       | `data/relay-chat.sqlite3` | SQLite 数据库路径。                        |
-| `LOG_PATH`                      | `data/relay-chat.log`     | 预留日志路径。                             |
-| `LOGIN_TOKEN_DAYS`              | `7`                       | 登录 token 滑动有效期天数。                |
-| `ACCESS_CODE`                   | 空                        | 未登录访问码；为空时未登录访问码校验关闭。 |
-| `REGISTRATION_CODE`             | 空                        | 注册码；为空时开放注册。                   |
-| `ACCESS_LIMIT_MAX`              | `8`                       | 访问码失败限流次数。                       |
-| `ACCESS_LIMIT_WINDOW_SECONDS`   | `300`                     | 访问码失败限流窗口秒数。                   |
-| `LOGIN_LIMIT_MAX`               | `8`                       | 登录失败限流次数。                         |
-| `LOGIN_LIMIT_WINDOW_SECONDS`    | `300`                     | 登录失败限流窗口秒数。                     |
-| `REGISTER_LIMIT_MAX`            | `8`                       | 注册失败限流次数。                         |
-| `REGISTER_LIMIT_WINDOW_SECONDS` | `300`                     | 注册失败限流窗口秒数。                     |
+| 配置                           | 默认值                    | 含义                                                                                  |
+| ------------------------------ | ------------------------- | ------------------------------------------------------------------------------------- |
+| `DATA_DIR`                     | `data`                    | 数据目录。                                                                            |
+| `DB_PATH`                      | `data/relay-chat.sqlite3` | SQLite 数据库路径。                                                                   |
+| `LOG_PATH`                     | `data/relay-chat.log`     | 预留日志路径。                                                                        |
+| `LOGIN_TOKEN_DAYS`             | `7`                       | 登录 token 滑动有效期天数。                                                           |
+| `ACCESS_CODE`                  | 空                        | 未登录访问码；为空时未登录访问码校验关闭。                                            |
+| `REGISTRATION_CODE`            | 空                        | 注册码；为空时开放注册。                                                              |
+| `REQUEST_LIMIT_MAX`            | `5`                       | 访问码、注册按 IP，登录按 IP+用户名的失败限流次数；用户名不存在时统一记为 `unknown`。 |
+| `REQUEST_LIMIT_WINDOW_SECONDS` | `300`                     | 失败限流窗口秒数。                                                                    |

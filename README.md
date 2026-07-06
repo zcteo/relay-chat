@@ -137,4 +137,4 @@ logread -f | grep relay-chat
 sudo python3 /opt/relay-chat/uninstall.py
 ```
 
-卸载时执行安装目录里的 `uninstall.py`，它会从安装目录 `.env` 文件内读取服务名和服务管理器，删除对应的 systemd unit 或 OpenWrt init 脚本；询问是否删除数据；是则移除整个安装目录；否只删除安装目录下的 `server/` 和 `static/`。
+卸载时执行安装目录里的 `uninstall.py`，它会从安装目录 `.env` 文件内读取服务管理器，删除固定服务名 `relay-chat` 对应的 systemd unit 或 OpenWrt init 脚本；询问是否删除数据；是则移除整个安装目录；否只删除安装目录下的 `server/` 和 `static/`。

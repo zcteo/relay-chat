@@ -159,7 +159,7 @@ def main() -> None:
     require_root()
     install_dir = default_install_dir()
     env = read_env(install_dir / ".env")
-    service_name = env.get("SERVICE_NAME", SERVICE_DEFAULT)
+    service_name = SERVICE_DEFAULT
     service_manager = env.get("SERVICE_MANAGER", SERVICE_MANAGER_DEFAULT)
 
     if ask_yes_no("是否删除用户数据并移除整个安装目录", False):

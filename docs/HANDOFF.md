@@ -97,7 +97,7 @@ sudo python3 scripts/install.py
 - `server/` 和 `static/` 从源码目录复制到安装目录。
 - `data/` 保存 SQLite 数据库。
 - `log/` 保存日志文件路径预留。
-- `.env` 保存服务管理器、服务名、监听地址、端口、访问码、注册码、数据库路径、日志路径等运行配置。
+- `.env` 保存服务管理器、监听地址、端口、访问码、注册码、数据库路径、日志路径等运行配置。
 - systemd unit 是系统级，写入 `/etc/systemd/system/<service>.service`。
 - OpenWrt init 脚本写入 `/etc/init.d/<service>`，使用 procd 托管进程。
 - systemd 服务运行用户是当前真实用户；用 sudo 执行安装时取 `$SUDO_USER`。
@@ -110,7 +110,7 @@ sudo python3 scripts/install.py
 sudo python3 /opt/relay-chat/uninstall.py
 ```
 
-卸载脚本从同目录 `.env` 读取 `SERVICE_MANAGER` 和服务名，删除对应的 systemd unit 或 OpenWrt init 脚本，并询问是否删除用户数据。选择删除会移除整个安装目录；选择保留会只删除 `server/` 和 `static/`。
+卸载脚本从同目录 `.env` 读取 `SERVICE_MANAGER`，删除固定服务名 `relay-chat` 对应的 systemd unit 或 OpenWrt init 脚本，并询问是否删除用户数据。选择删除会移除整个安装目录；选择保留会只删除 `server/` 和 `static/`。
 
 修改后端代码后，如果当前以 systemd 运行：
 
@@ -167,6 +167,7 @@ FastAPI 入口是 `server/main.py`。启动时调用 `init_db()` 初始化 SQLit
 - 未登录调用 `/api/chat`、`/api/models` 必须带 `X-Access-Code`。
 - 已登录调用 `/api/chat`、`/api/models` 带 `Authorization: Bearer <token>`，不需要访问码。
 - `REGISTRATION_CODE` 为空时开放注册；非空时注册请求必须传 `registrationCode`。
+- 访问码和注册失败限流 key 为真实客户端 IP；登录密码错误限流 key 为真实客户端 IP + 用户名，用户名不存在时统一记为 `unknown`；真实 IP 优先读取 `X-Forwarded-For` 第一个地址，其次 `X-Real-IP`，最后使用连接 IP。
 - 限流是单进程内存限流，只记录失败尝试；多进程或多实例部署需要改成 Redis、Nginx 或网关限流。
 
 ### 代理协议

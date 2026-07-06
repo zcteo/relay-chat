@@ -109,24 +109,15 @@ def prepare_existing_install(
     old_dir: Path | None,
     old_env: dict[str, str],
     new_dir: Path,
-    new_service: str,
     new_service_manager: str,
 ) -> None:
     if not old_dir or not old_env:
         return
-    old_service = old_env.get("SERVICE_NAME", SERVICE_DEFAULT)
     old_service_manager = old_env.get("SERVICE_MANAGER", SERVICE_MANAGER_SYSTEMD)
-    service_changed = old_service != new_service
     service_manager_changed = old_service_manager != new_service_manager
     path_changed = old_dir != new_dir
-    if not service_changed and not service_manager_changed and not path_changed:
+    if not service_manager_changed and not path_changed:
         return
-
-    if service_changed and not ask_yes_no(
-        f"检测到服务名变化：{old_service} -> {new_service}，是否允许安装脚本自动停止并删除旧服务",
-        True,
-    ):
-        raise SystemExit("已取消安装")
 
     migrate_old_data = False
     if path_changed:
@@ -140,21 +131,21 @@ def prepare_existing_install(
         migrate_data(old_dir, new_dir, old_env)
         cleanup_install(
             old_dir,
-            old_service,
+            SERVICE_DEFAULT,
             remove_data=True,
             service_manager=old_service_manager,
         )
     elif path_changed:
         cleanup_install(
             old_dir,
-            old_service,
+            SERVICE_DEFAULT,
             remove_data=True,
             service_manager=old_service_manager,
         )
     else:
         cleanup_install(
             old_dir,
-            old_service,
+            SERVICE_DEFAULT,
             remove_data=False,
             service_manager=old_service_manager,
         )
@@ -275,8 +266,7 @@ def main() -> None:
     legacy_install = (home_dir / ".local/share/relay-chat").resolve()
     default_env = read_env(default_install / ".env")
     legacy_env = {} if legacy_install == default_install else read_env(legacy_install / ".env")
-    base_env = default_env or legacy_env
-    service_name = ask("服务名", base_env.get("SERVICE_NAME", SERVICE_DEFAULT))
+    service_name = SERVICE_DEFAULT
     install_dir = validate_install_dir(Path(ask("安装目录", str(default_install))))
     env_path = install_dir / ".env"
     target_env = read_env(env_path)
@@ -297,7 +287,6 @@ def main() -> None:
         existing_install_dir,
         old_env,
         install_dir,
-        service_name,
         service_manager,
     )
 
@@ -340,7 +329,6 @@ def main() -> None:
 
     env_values = {
         "SERVICE_MANAGER": service_manager,
-        "SERVICE_NAME": service_name,
         "HOST": host,
         "PORT": port,
         "DATA_DIR": str(data_dir),
@@ -349,6 +337,8 @@ def main() -> None:
         "ACCESS_CODE": access_code,
         "REGISTRATION_CODE": registration_code,
         "LOGIN_TOKEN_DAYS": old_env.get("LOGIN_TOKEN_DAYS", "7"),
+        "REQUEST_LIMIT_MAX": old_env.get("REQUEST_LIMIT_MAX", "5"),
+        "REQUEST_LIMIT_WINDOW_SECONDS": old_env.get("REQUEST_LIMIT_WINDOW_SECONDS", "300"),
     }
     write_env(env_path, env_values)
 

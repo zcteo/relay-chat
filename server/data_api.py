@@ -15,15 +15,9 @@ from .auth import (
     public_user,
     verify_password,
 )
-from .config import (
-    LOGIN_LIMIT_MAX,
-    LOGIN_LIMIT_WINDOW_SECONDS,
-    REGISTER_LIMIT_MAX,
-    REGISTER_LIMIT_WINDOW_SECONDS,
-    REGISTRATION_CODE,
-)
+from .config import REGISTRATION_CODE
 from .db import db
-from .rate_limit import check_limit, clear_failures, client_ip, record_failure
+from .rate_limit import clear_failures, login_limit_key, record_failure, request_limit_key
 
 
 router = APIRouter(prefix="/api")
@@ -175,22 +169,13 @@ def should_offer(row: Any) -> bool:
     return int(row["first_login_completed"] or 0) == 0
 
 
-def login_limit_key(request: Request, username: str) -> str:
-    return f"login:{client_ip(request)}:{username.lower()}"
-
-
-def register_limit_key(request: Request) -> str:
-    return f"register:{client_ip(request)}"
-
-
 def require_registration_code(req: Credentials, request: Request) -> None:
     if not REGISTRATION_CODE.strip():
         return
-    key = register_limit_key(request)
-    check_limit(key, REGISTER_LIMIT_MAX, REGISTER_LIMIT_WINDOW_SECONDS)
+    key = request_limit_key(request)
     if req.registration_code.strip() == REGISTRATION_CODE.strip():
         return
-    record_failure(key, REGISTER_LIMIT_MAX, REGISTER_LIMIT_WINDOW_SECONDS)
+    record_failure(key)
     raise HTTPException(status_code=403, detail="invalid_registration_code")
 
 
@@ -220,13 +205,9 @@ async def register(req: Credentials, request: Request) -> dict[str, Any]:
             )
             user_id = int(cur.lastrowid)
     except sqlite3.IntegrityError as e:
-        record_failure(
-            register_limit_key(request),
-            REGISTER_LIMIT_MAX,
-            REGISTER_LIMIT_WINDOW_SECONDS,
-        )
+        record_failure(request_limit_key(request))
         raise HTTPException(status_code=409, detail="username_exists") from e
-    clear_failures(register_limit_key(request))
+    clear_failures(request_limit_key(request))
     return {"user": {"id": user_id, "username": username}, "ok": True}
 
 
@@ -234,11 +215,13 @@ async def register(req: Credentials, request: Request) -> dict[str, Any]:
 async def login(req: Credentials, request: Request) -> dict[str, Any]:
     username = req.username.strip()
     key = login_limit_key(request, username)
-    check_limit(key, LOGIN_LIMIT_MAX, LOGIN_LIMIT_WINDOW_SECONDS)
     with db() as conn:
         row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-    if not row or not verify_password(req.password, row["password_hash"]):
-        record_failure(key, LOGIN_LIMIT_MAX, LOGIN_LIMIT_WINDOW_SECONDS)
+    if not row:
+        record_failure(login_limit_key(request, "unknown"))
+        raise HTTPException(status_code=401, detail="invalid_credentials")
+    if not verify_password(req.password, row["password_hash"]):
+        record_failure(key)
         raise HTTPException(status_code=401, detail="invalid_credentials")
     clear_failures(key)
     token = create_login_token(row["id"])

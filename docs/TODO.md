@@ -14,22 +14,24 @@
 - [x] 安装部署脚本改造
   - `scripts/install.py` 不使用命令行参数，采用交互式安装。
   - 每个安装选项都显示默认值，用户可编辑；直接回车使用默认值。
-  - 默认安装目录为 `~/.local/share/relay-chat`，运行目录和数据目录不得放在源码目录下。
+  - 默认安装目录为 `/opt/relay-chat`，运行目录和数据目录不得放在源码目录下。
   - 默认安装目录结构：
     - `server/`：从源码 `server/` 原封不动拷贝。
     - `static/`：HTML、CSS、JS、图片等静态文件从源码原样拷贝。
     - `data/`：存放 SQLite 数据库。
     - `log/`：存放应用日志。
-    - `.env`：存放监听地址、端口、访问码、注册码、数据库路径、日志路径等配置。
+    - `.env`：存放服务管理器、监听地址、端口、访问码、注册码、数据库路径、日志路径等配置。
     - `uninstall.py`：安装目录内的交互式卸载脚本。
   - `server/config.py` 只负责读取环境变量和 `.env`，不存放需要人工修改的部署配置。
   - 后续修改运行配置只改安装目录下 `.env`，不修改 Python 源码。
+  - 自动检测服务管理器，支持 systemd 和 OpenWrt procd。
   - systemd 仍使用系统级 unit，写入 `/etc/systemd/system/relay-chat.service`。
+  - OpenWrt 使用 `/etc/init.d/relay-chat` init 脚本，并交给 procd 托管。
   - systemd 服务运行用户为当前真实用户；使用 sudo 执行时取 `$SUDO_USER`，避免数据库和日志写成 root。
   - unit 的 `WorkingDirectory` 指向安装目录，`EnvironmentFile` 指向安装目录下 `.env`。
   - 首次安装时生成访问码和注册码，写入 `.env`，并在终端输出一次提醒用户保存。
   - 重新安装时保留已有 `.env`、`data/` 和 `log/`，只更新 `server/` 和 `static/`。
-  - 安装时把 `scripts/uninstall.py` 复制到安装目录；卸载时执行安装目录内的 `uninstall.py`，固定删除 systemd unit，并可选择删除整个安装目录或只删除 `server/`、`static/`。
+  - 安装时把 `scripts/uninstall.py` 复制到安装目录；卸载时执行安装目录内的 `uninstall.py`，按 `SERVICE_MANAGER` 删除对应服务，并可选择删除整个安装目录或只删除 `server/`、`static/`。
 
 - [x] 支持数据保存在后端
   - 未登录时设置、Token、模型列表、会话历史保存在浏览器 localStorage。

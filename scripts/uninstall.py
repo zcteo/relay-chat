@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 import os
+import pwd
 import shutil
 import subprocess
 from pathlib import Path
 
 
 SERVICE_DEFAULT = "relay-chat"
+SERVICE_MANAGER_DEFAULT = "systemd"
 UNIT_DIR = Path("/etc/systemd/system")
+INIT_DIR = Path("/etc/init.d")
 
 
-def require_root(usage: str = "sudo python3 ~/.local/share/relay-chat/uninstall.py") -> None:
+def require_root(usage: str = "sudo python3 /opt/relay-chat/uninstall.py") -> None:
     if os.geteuid() != 0:
         raise SystemExit(f"请用 root 运行，例如：{usage}")
 
@@ -22,10 +25,15 @@ def run(
     quiet: bool = False,
 ) -> None:
     if user:
-        if shutil.which("sudo"):
+        current_user = pwd.getpwuid(os.geteuid()).pw_name
+        if user == current_user:
+            pass
+        elif shutil.which("sudo"):
             cmd = ["sudo", "-H", "-u", user, *cmd]
-        else:
+        elif shutil.which("runuser"):
             cmd = ["runuser", "-u", user, "--", *cmd]
+        else:
+            raise SystemExit(f"缺少 sudo 或 runuser，无法以用户 {user} 执行命令")
     kwargs = {}
     if quiet:
         kwargs = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
@@ -70,7 +78,15 @@ def validate_target(path: Path) -> Path:
     return target
 
 
-def remove_unit(service_name: str, unit_file: Path | None = None) -> None:
+def normalize_service_manager(value: str | None) -> str:
+    manager = (value or SERVICE_MANAGER_DEFAULT).strip().lower()
+    if manager not in {"systemd", "openwrt"}:
+        print(f"未知服务管理器：{manager}，按 systemd 处理")
+        return SERVICE_MANAGER_DEFAULT
+    return manager
+
+
+def remove_systemd_service(service_name: str, unit_file: Path | None = None) -> None:
     service = f"{service_name}.service"
     unit_file = unit_file or UNIT_DIR / service
     print(f"==> 停止服务：{service}")
@@ -82,6 +98,27 @@ def remove_unit(service_name: str, unit_file: Path | None = None) -> None:
         unit_file.unlink()
     run(["systemctl", "daemon-reload"])
     run(["systemctl", "reset-failed", service], check=False, quiet=True)
+
+
+def remove_openwrt_service(service_name: str, init_file: Path | None = None) -> None:
+    init_file = init_file or INIT_DIR / service_name
+    print(f"==> 停止服务：{service_name}")
+    if init_file.exists():
+        run([str(init_file), "stop"], check=False, quiet=True)
+        print(f"==> 禁用服务：{service_name}")
+        run([str(init_file), "disable"], check=False, quiet=True)
+        print(f"==> 删除 OpenWrt init 脚本：{init_file}")
+        init_file.unlink()
+    else:
+        print(f"OpenWrt init 脚本不存在：{init_file}")
+
+
+def remove_service(service_name: str, service_manager: str) -> None:
+    manager = normalize_service_manager(service_manager)
+    if manager == "openwrt":
+        remove_openwrt_service(service_name)
+        return
+    remove_systemd_service(service_name)
 
 
 def remove_runtime_dirs(install_dir: Path) -> None:
@@ -97,9 +134,10 @@ def cleanup_install(
     service_name: str,
     *,
     remove_data: bool,
+    service_manager: str = SERVICE_MANAGER_DEFAULT,
 ) -> None:
     install_dir = validate_target(install_dir)
-    remove_unit(service_name)
+    remove_service(service_name, service_manager)
     if not install_dir.exists():
         print(f"安装目录不存在：{install_dir}")
         return
@@ -114,16 +152,28 @@ def cleanup_install(
 def main() -> None:
     require_root()
     install_dir = default_install_dir()
-    service_name = read_env(install_dir / ".env").get("SERVICE_NAME", SERVICE_DEFAULT)
+    env = read_env(install_dir / ".env")
+    service_name = env.get("SERVICE_NAME", SERVICE_DEFAULT)
+    service_manager = env.get("SERVICE_MANAGER", SERVICE_MANAGER_DEFAULT)
 
     if ask_yes_no("是否删除用户数据并移除整个安装目录", False):
         confirm = input(f"输入 yes 确认删除整个目录 {install_dir}: ").strip()
         if confirm != "yes":
             print("未确认，保留安装目录")
         else:
-            cleanup_install(install_dir, service_name, remove_data=True)
+            cleanup_install(
+                install_dir,
+                service_name,
+                remove_data=True,
+                service_manager=service_manager,
+            )
     else:
-        cleanup_install(install_dir, service_name, remove_data=False)
+        cleanup_install(
+            install_dir,
+            service_name,
+            remove_data=False,
+            service_manager=service_manager,
+        )
 
     print("==> 卸载完成")
 

@@ -66,22 +66,22 @@ relay-chat/
 python3 -m uvicorn server.main:app --host 0.0.0.0 --port 8000
 ```
 
-systemd 安装：
+服务安装：
 
 ```bash
 sudo python3 scripts/install.py
 ```
 
-安装脚本是交互式的，不接收命令行参数。默认安装到当前真实用户的：
+安装脚本是交互式的，不接收命令行参数。脚本自动检测服务管理器，支持 systemd 和 OpenWrt procd。默认安装到：
 
 ```text
-~/.local/share/relay-chat
+/opt/relay-chat
 ```
 
 安装目录结构：
 
 ```text
-~/.local/share/relay-chat/
+/opt/relay-chat/
 ├── server/
 ├── static/
 ├── data/
@@ -97,24 +97,31 @@ sudo python3 scripts/install.py
 - `server/` 和 `static/` 从源码目录复制到安装目录。
 - `data/` 保存 SQLite 数据库。
 - `log/` 保存日志文件路径预留。
-- `.env` 保存服务名、监听地址、端口、访问码、注册码、数据库路径、日志路径等运行配置。
+- `.env` 保存服务管理器、服务名、监听地址、端口、访问码、注册码、数据库路径、日志路径等运行配置。
 - systemd unit 是系统级，写入 `/etc/systemd/system/<service>.service`。
-- systemd 运行用户是当前真实用户；用 sudo 执行安装时取 `$SUDO_USER`。
+- OpenWrt init 脚本写入 `/etc/init.d/<service>`，使用 procd 托管进程。
+- systemd 服务运行用户是当前真实用户；用 sudo 执行安装时取 `$SUDO_USER`。
 - 安装脚本会把 `scripts/uninstall.py` 复制到安装目录。
 - 安装和卸载都需要使用的公共函数统一写在 `scripts/uninstall.py`，`scripts/install.py` 直接导入复用；安装专用逻辑仍保留在 `scripts/install.py`。
 
 卸载执行安装目录里的脚本：
 
 ```bash
-sudo python3 ~/.local/share/relay-chat/uninstall.py
+sudo python3 /opt/relay-chat/uninstall.py
 ```
 
-卸载脚本从同目录 `.env` 读取服务名，固定删除 systemd unit，并询问是否删除用户数据。选择删除会移除整个安装目录；选择保留会只删除 `server/` 和 `static/`。
+卸载脚本从同目录 `.env` 读取 `SERVICE_MANAGER` 和服务名，删除对应的 systemd unit 或 OpenWrt init 脚本，并询问是否删除用户数据。选择删除会移除整个安装目录；选择保留会只删除 `server/` 和 `static/`。
 
 修改后端代码后，如果当前以 systemd 运行：
 
 ```bash
 sudo systemctl restart relay-chat.service
+```
+
+如果当前以 OpenWrt procd 运行：
+
+```bash
+/etc/init.d/relay-chat restart
 ```
 
 修改目录结构、服务入口、依赖、虚拟环境位置或安装脚本后，需要重新运行：
@@ -140,7 +147,7 @@ FastAPI 入口是 `server/main.py`。启动时调用 `init_db()` 初始化 SQLit
 
 `server/config.py` 只负责读取环境变量和 `.env`，不存放需要人工修改的部署配置。
 
-后续修改监听地址、端口、数据库路径、日志路径、访问码、注册码等部署配置时，只改安装目录 `.env` 或 systemd `EnvironmentFile`，不要修改 Python 源码。
+后续修改监听地址、端口、数据库路径、日志路径、访问码、注册码等部署配置时，只改安装目录 `.env`，不要修改 Python 源码。
 
 真实环境变量优先级高于 `.env`。
 

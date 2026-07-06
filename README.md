@@ -71,12 +71,19 @@ http://服务器IP:8000
 
 ## 安装
 
-会安装为 systemd 服务
+安装脚本会自动检测服务管理器，支持 systemd 和 OpenWrt procd。
 
 首次安装前需要系统支持 Python 虚拟环境；Debian/Ubuntu 可先安装：
 
 ```bash
 sudo apt install python3-venv
+```
+
+OpenWrt 可先安装 Python 运行环境：
+
+```bash
+opkg update
+opkg install python3 python3-pip python3-venv
 ```
 
 安装并启动服务：
@@ -91,7 +98,7 @@ sudo python3 scripts/install.py
 服务名: relay-chat
 监听: 0.0.0.0:8000
 运行用户: 当前用户；sudo 执行时为 sudo 调用用户
-安装目录: ~/.local/share/relay-chat
+安装目录: /opt/relay-chat
 ```
 
 安装脚本为交互式，每个选项可编辑，直接回车使用默认值。首次安装会生成仅包含大小写字母和数字的访问码、注册码，并写入安装目录下的 `.env`。
@@ -99,7 +106,7 @@ sudo python3 scripts/install.py
 安装目录结构：
 
 ```text
-~/.local/share/relay-chat/
+/opt/relay-chat/
 ├── server/
 ├── static/
 ├── data/
@@ -114,18 +121,20 @@ sudo python3 scripts/install.py
 
 ```bash
 systemctl status relay-chat.service
+/etc/init.d/relay-chat status
 ```
 
 查看日志：
 
 ```bash
 journalctl -u relay-chat.service -f
+logread -f | grep relay-chat
 ```
 
 ## 卸载
 
 ```bash
-sudo python3 ~/.local/share/relay-chat/uninstall.py
+sudo python3 /opt/relay-chat/uninstall.py
 ```
 
-卸载时执行安装目录里的 `uninstall.py`，它会从安装目录 `.env` 文件内读取服务名，删除 systemd unit；询问是否删除数据；是则移除整个安装目录；否只删除安装目录下的 `server/` 和 `static/`。
+卸载时执行安装目录里的 `uninstall.py`，它会从安装目录 `.env` 文件内读取服务名和服务管理器，删除对应的 systemd unit 或 OpenWrt init 脚本；询问是否删除数据；是则移除整个安装目录；否只删除安装目录下的 `server/` 和 `static/`。

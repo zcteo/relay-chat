@@ -823,6 +823,34 @@ header {
 .thinking li {
   margin: 0.15em 0;
 }
+.msg.assistant .content .markdown-table,
+.thinking .markdown-table {
+  margin: 0.75em 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.msg.assistant .content table,
+.thinking table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95em;
+  line-height: 1.45;
+}
+.msg.assistant .content th,
+.msg.assistant .content td,
+.thinking th,
+.thinking td {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  vertical-align: top;
+}
+.msg.assistant .content th,
+.thinking th {
+  background: var(--surface-muted);
+  font-weight: 650;
+  text-align: left;
+}
 .msg.assistant .content h1,
 .msg.assistant .content h2,
 .msg.assistant .content h3,

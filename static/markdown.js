@@ -36,6 +36,50 @@
     para.length = 0
   }
 
+  function splitTableRow(line) {
+    let s = String(line || "").trim()
+    if (!s.includes("|")) return null
+    if (s.startsWith("|")) s = s.slice(1)
+    if (s.endsWith("|")) s = s.slice(0, -1)
+    return s.split("|").map((cell) => cell.trim())
+  }
+
+  function parseTableSeparator(line) {
+    const cells = splitTableRow(line)
+    if (!cells || cells.length < 2) return null
+    const aligns = []
+    for (const cell of cells) {
+      if (!/^:?-{3,}:?$/.test(cell)) return null
+      const left = cell.startsWith(":")
+      const right = cell.endsWith(":")
+      aligns.push(
+        left && right ? "center" : right ? "right" : left ? "left" : "",
+      )
+    }
+    return aligns
+  }
+
+  function tableCellHtml(tag, value, align) {
+    const attr = align ? ` style="text-align:${align}"` : ""
+    return `<${tag}${attr}>${inlineMarkdown(value || "")}</${tag}>`
+  }
+
+  function tableHtml(header, aligns, rows) {
+    const width = Math.max(header.length, aligns.length)
+    const head = Array.from({ length: width }, (_, i) =>
+      tableCellHtml("th", header[i] || "", aligns[i] || ""),
+    ).join("")
+    const body = rows
+      .map((row) => {
+        const cells = Array.from({ length: width }, (_, i) =>
+          tableCellHtml("td", row[i] || "", aligns[i] || ""),
+        ).join("")
+        return `<tr>${cells}</tr>`
+      })
+      .join("")
+    return `<div class="markdown-table"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
+  }
+
   function renderMarkdown(md) {
     const lines = String(md ?? "")
       .replace(/\r\n?/g, "\n")
@@ -64,7 +108,8 @@
       return `<div class="code-block"><button class="copy-code" type="button" title="复制代码" aria-label="复制代码"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="icon-md" viewBox="0 0 20 20" fill="none"><path d="M7 7.5C7 6.67 7.67 6 8.5 6H15c.83 0 1.5.67 1.5 1.5V15c0 .83-.67 1.5-1.5 1.5H8.5C7.67 16.5 7 15.83 7 15V7.5Z" stroke="currentColor" stroke-width="1.5"/><path d="M4 12.5V5c0-.83.67-1.5 1.5-1.5H12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button><pre><code${codeLang ? ` class="language-${escapeHtml(codeLang)}"` : ""}>${escapeHtml(code.join("\n"))}</code></pre></div>`
     }
 
-    for (const line of lines) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
       const fence = line.match(/^([ \t]*)(`{3,}|~{3,})[ \t]*([^`~]*)[ \t]*$/)
       if (
         fence &&
@@ -97,6 +142,25 @@
             ? line.slice(codeIndent.length)
             : line,
         )
+        continue
+      }
+
+      const header = splitTableRow(line)
+      const aligns =
+        i + 1 < lines.length ? parseTableSeparator(lines[i + 1]) : null
+      if (header && aligns && header.length >= 2) {
+        flushParagraph(out, para)
+        flushList()
+        const rows = []
+        i += 2
+        while (i < lines.length) {
+          const row = splitTableRow(lines[i])
+          if (!row) break
+          rows.push(row)
+          i += 1
+        }
+        i -= 1
+        out.push(tableHtml(header, aligns, rows))
         continue
       }
 

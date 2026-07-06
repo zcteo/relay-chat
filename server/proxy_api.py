@@ -242,13 +242,22 @@ async def stream_anthropic(req: ChatRequest) -> AsyncIterator[bytes]:
     yield sse({"type": "done"})
 
 
+async def safe_stream(gen: AsyncIterator[bytes], label: str) -> AsyncIterator[bytes]:
+    try:
+        async for chunk in gen:
+            yield chunk
+    except httpx.HTTPError as e:
+        logger.warning("%s 上游流中断: %s", label, e)
+        yield sse({"type": "error", "error": f"上游流中断: {e}"})
+
+
 @router.post("/chat")
 async def chat(request: Request, req: ChatRequest) -> StreamingResponse:
     require_proxy_access(request)
     if req.protocol == "anthropic":
-        gen = stream_anthropic(req)
+        gen = safe_stream(stream_anthropic(req), "Anthropic messages")
     elif req.protocol == "openai_chat":
-        gen = stream_openai_chat(req)
+        gen = safe_stream(stream_openai_chat(req), "OpenAI chat")
     else:
-        gen = stream_openai_responses(req)
+        gen = safe_stream(stream_openai_responses(req), "OpenAI responses")
     return StreamingResponse(gen, media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

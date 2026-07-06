@@ -778,7 +778,6 @@ anthropic-version: 2023-06-01
       "content": "1+1 等于几？"
     }
   ],
-  "temperature": 0.7,
   "max_tokens": 4096,
   "thinking": true
 }

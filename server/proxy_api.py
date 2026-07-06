@@ -27,7 +27,6 @@ class ApiConfig(BaseModel):
 class ChatRequest(ApiConfig):
     model: str
     messages: list[dict[str, Any]]
-    temperature: float | None = None
     max_tokens: int | None = None
     thinking: bool = False
 
@@ -98,8 +97,6 @@ def sse(obj: dict[str, Any]) -> bytes:
 
 async def stream_openai_responses(req: ChatRequest) -> AsyncIterator[bytes]:
     body: dict[str, Any] = {"model": req.model, "input": req.messages, "stream": True}
-    if req.temperature is not None:
-        body["temperature"] = req.temperature
     if req.max_tokens:
         body["max_output_tokens"] = req.max_tokens
     if req.thinking:
@@ -154,8 +151,6 @@ async def stream_openai_responses(req: ChatRequest) -> AsyncIterator[bytes]:
 
 async def stream_openai_chat(req: ChatRequest) -> AsyncIterator[bytes]:
     body: dict[str, Any] = {"model": req.model, "messages": req.messages, "stream": True}
-    if req.temperature is not None:
-        body["temperature"] = req.temperature
     if req.max_tokens:
         body["max_tokens"] = req.max_tokens
     body["thinking"] = thinking_config(req.thinking)
@@ -194,8 +189,6 @@ async def stream_anthropic(req: ChatRequest) -> AsyncIterator[bytes]:
     body: dict[str, Any] = {"model": req.model, "messages": msgs, "stream": True, "max_tokens": req.max_tokens or 4096}
     if system:
         body["system"] = system
-    if req.temperature is not None:
-        body["temperature"] = req.temperature
     if not req.thinking:
         body["thinking"] = thinking_config(False)
 

@@ -256,7 +256,6 @@ const SERVER_AUTH_KEY = "relaychat-server-auth-v1";
 {
   theme: "auto",
   thinking: true,
-  temperature: "",
   maxTokens: "",
   systemPrompt: "",
   historyCount: "6",

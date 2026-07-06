@@ -213,8 +213,22 @@ async def stream_anthropic(req: ChatRequest) -> AsyncIterator[bytes]:
                     d = data.get("delta", {})
                     if d.get("type") == "text_delta" and d.get("text"):
                         yield sse({"type": "content", "delta": d["text"]})
+                    elif isinstance(d.get("text"), str) and d.get("text"):
+                        yield sse({"type": "content", "delta": d["text"]})
+                    elif isinstance(d.get("content"), str) and d.get("content"):
+                        yield sse({"type": "content", "delta": d["content"]})
                     elif d.get("type") in ("thinking_delta", "signature_delta") and d.get("thinking"):
                         yield sse({"type": "thinking", "delta": d["thinking"]})
+                elif t == "content_block_start":
+                    block = data.get("content_block", {})
+                    if isinstance(block.get("text"), str) and block.get("text"):
+                        yield sse({"type": "content", "delta": block["text"]})
+                elif t == "text_delta":
+                    text = data.get("text") or data.get("delta")
+                    if isinstance(text, str) and text:
+                        yield sse({"type": "content", "delta": text})
+                elif isinstance(data.get("content"), str) and data.get("content"):
+                    yield sse({"type": "content", "delta": data["content"]})
                 elif t == "message_delta":
                     usage = data.get("usage")
                     if usage:

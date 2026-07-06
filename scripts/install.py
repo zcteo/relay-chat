@@ -304,8 +304,12 @@ def main() -> None:
     host = ask("监听地址", old_env.get("HOST", HOST_DEFAULT))
     port = ask("监听端口", old_env.get("PORT", PORT_DEFAULT))
     validate_port(port)
-    access_code = ask("访问码", old_env.get("ACCESS_CODE", random_code()))
-    registration_code = ask("注册码", old_env.get("REGISTRATION_CODE", random_code()))
+    access_code = ask("访问码", old_env.get("ACCESS_CODE", random_code()), allow_empty=True)
+    registration_code = ask(
+        "注册码",
+        old_env.get("REGISTRATION_CODE", random_code()),
+        allow_empty=True,
+    )
     install_deps = ask_yes_no("安装/更新 Python 依赖", True)
     restart_service = ask_yes_no("启动/重启服务", True)
 

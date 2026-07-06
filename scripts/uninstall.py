@@ -40,8 +40,14 @@ def run(
     subprocess.run(cmd, check=check, **kwargs)
 
 
-def ask(prompt: str, default: str) -> str:
-    value = input(f"{prompt} [{default}]: ").strip()
+def ask(prompt: str, default: str, *, allow_empty: bool = False) -> str:
+    suffix = f"{prompt} [{default}]"
+    if allow_empty:
+        suffix += "，输入空格表示空"
+    raw = input(f"{suffix}: ")
+    if allow_empty and raw and raw.strip() == "":
+        return ""
+    value = raw.strip()
     return value or default
 
 

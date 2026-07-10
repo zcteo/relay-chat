@@ -1,8 +1,8 @@
 const RelayServerStorage = (() => {
   async function readJsonResponse(resp) {
-    const data = await resp.json().catch(() => ({}))
-    if (!resp.ok) throw new Error(data.detail || data.error || resp.statusText)
-    return data
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.detail || data.error || resp.statusText);
+    return data;
   }
 
   async function request(auth, onExpired, url, options = {}) {
@@ -10,13 +10,13 @@ const RelayServerStorage = (() => {
       ...(options.body ? { "Content-Type": "application/json" } : {}),
       Authorization: `Bearer ${auth?.token || ""}`,
       ...(options.headers || {}),
-    }
-    const resp = await fetch(url, { ...options, headers })
+    };
+    const resp = await fetch(url, { ...options, headers });
     if (resp.status === 401) {
-      onExpired()
-      throw new Error("登录已过期，请重新登录")
+      onExpired();
+      throw new Error("登录已过期，请重新登录");
     }
-    return resp
+    return resp;
   }
 
   function settingsPayload(state) {
@@ -27,7 +27,7 @@ const RelayServerStorage = (() => {
       model: state.settings.model || "",
       protocol: state.settings.protocol || "openai_responses",
       models: state.settings.models || [],
-    }
+    };
   }
 
   function normalizeSession(session) {
@@ -40,7 +40,7 @@ const RelayServerStorage = (() => {
       messageCount: session.messageCount || 0,
       messages: session.messages || [],
       messagesLoaded: !!session.messages,
-    }
+    };
   }
 
   function normalizeMessage(message) {
@@ -51,20 +51,20 @@ const RelayServerStorage = (() => {
       thinking: message.thinking || "",
       createdAt: message.createdAt || Date.now(),
       sortOrder: message.sortOrder || 0,
-    }
+    };
   }
 
   async function loadHome(auth, onExpired) {
     const [profileResp, sessionsResp] = await Promise.all([
       request(auth, onExpired, "/api/profile"),
       request(auth, onExpired, "/api/sessions"),
-    ])
-    const profile = await readJsonResponse(profileResp)
-    const sessionsData = await readJsonResponse(sessionsResp)
+    ]);
+    const profile = await readJsonResponse(profileResp);
+    const sessionsData = await readJsonResponse(sessionsResp);
     return {
       profile,
       sessions: (sessionsData.sessions || []).map(normalizeSession),
-    }
+    };
   }
 
   async function authenticate(path, username, password, extra = {}) {
@@ -72,23 +72,23 @@ const RelayServerStorage = (() => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password, ...extra }),
-    })
-    return readJsonResponse(resp)
+    });
+    return readJsonResponse(resp);
   }
 
   async function saveSettings(auth, onExpired, state, patch = null) {
     const resp = await request(auth, onExpired, "/api/settings", {
       method: patch ? "PATCH" : "PUT",
       body: JSON.stringify(patch || settingsPayload(state)),
-    })
-    return readJsonResponse(resp)
+    });
+    return readJsonResponse(resp);
   }
 
   async function skipImport(auth, onExpired) {
     const resp = await request(auth, onExpired, "/api/import-local/skip", {
       method: "POST",
-    })
-    return readJsonResponse(resp)
+    });
+    return readJsonResponse(resp);
   }
 
   async function importLocal(auth, onExpired, localState) {
@@ -105,8 +105,8 @@ const RelayServerStorage = (() => {
         },
         sessions: localState.sessions || [],
       }),
-    })
-    return readJsonResponse(resp)
+    });
+    return readJsonResponse(resp);
   }
 
   async function loadMessages(auth, onExpired, sessionId) {
@@ -114,20 +114,20 @@ const RelayServerStorage = (() => {
       auth,
       onExpired,
       `/api/sessions/${encodeURIComponent(sessionId)}/messages`,
-    )
-    const data = await readJsonResponse(resp)
-    return (data.messages || []).map(normalizeMessage)
+    );
+    const data = await readJsonResponse(resp);
+    return (data.messages || []).map(normalizeMessage);
   }
 
   async function createSession(auth, onExpired, title) {
     const resp = await request(auth, onExpired, "/api/sessions", {
       method: "POST",
       body: JSON.stringify({ title, titleSource: "default" }),
-    })
-    const data = await readJsonResponse(resp)
-    const session = normalizeSession({ ...data.session, messages: [] })
-    session.messagesLoaded = true
-    return session
+    });
+    const data = await readJsonResponse(resp);
+    const session = normalizeSession({ ...data.session, messages: [] });
+    session.messagesLoaded = true;
+    return session;
   }
 
   async function updateSession(auth, onExpired, session) {
@@ -142,8 +142,8 @@ const RelayServerStorage = (() => {
           titleSource: session.titleSource || "default",
         }),
       },
-    )
-    return readJsonResponse(resp)
+    );
+    return readJsonResponse(resp);
   }
 
   async function deleteSession(auth, onExpired, sessionId) {
@@ -152,8 +152,8 @@ const RelayServerStorage = (() => {
       onExpired,
       `/api/sessions/${encodeURIComponent(sessionId)}`,
       { method: "DELETE" },
-    )
-    return readJsonResponse(resp)
+    );
+    return readJsonResponse(resp);
   }
 
   async function createMessage(auth, onExpired, session, message) {
@@ -170,18 +170,18 @@ const RelayServerStorage = (() => {
           sortOrder: session.messages.indexOf(message) + 1,
         }),
       },
-    )
-    const data = await readJsonResponse(resp)
-    message.id = data.message?.id || message.id
-    return data.message
+    );
+    const data = await readJsonResponse(resp);
+    message.id = data.message?.id || message.id;
+    return data.message;
   }
 
   async function changePassword(auth, onExpired, payload) {
     const resp = await request(auth, onExpired, "/api/password", {
       method: "PUT",
       body: JSON.stringify(payload),
-    })
-    return readJsonResponse(resp)
+    });
+    return readJsonResponse(resp);
   }
 
   async function logout(auth) {
@@ -190,9 +190,9 @@ const RelayServerStorage = (() => {
       headers: {
         Authorization: `Bearer ${auth?.token || ""}`,
       },
-    })
-    if (resp.status === 401) return { ok: true }
-    return readJsonResponse(resp)
+    });
+    if (resp.status === 401) return { ok: true };
+    return readJsonResponse(resp);
   }
 
   return {
@@ -208,5 +208,5 @@ const RelayServerStorage = (() => {
     createMessage,
     changePassword,
     logout,
-  }
-})()
+  };
+})();
